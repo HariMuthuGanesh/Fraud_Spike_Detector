@@ -58,7 +58,9 @@ dist-ssr/
 *.key
 *.cert
 
-# IDE & OS
+# IDE & OS & Agent configs
+.agent/
+.agents/
 .vscode/
 .idea/
 .DS_Store
