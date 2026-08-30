@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fraud-Spike Detector | Razorpay AI Risk Manager</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-logo">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            <path d="m9 12 2 2 4-4"/>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <span class="brand-title">RiskShield</span>
+          <span class="brand-badge">Track 02</span>
+        </div>
+      </div>
+
+      <div class="merchant-switcher">
+        <label for="merchantSelect">Active Merchant</label>
+        <div class="select-wrapper">
+          <select id="merchantSelect" onchange="switchMerchant(this.value)">
+            <option value="merch_apex_retail">Apex Direct Electronics</option>
+            <option value="merch_solis_pay">Solis Digital Services</option>
+            <option value="merch_lunar_travel">Lunar Global Travel</option>
+          </select>
+        </div>
+      </div>
+
+      <nav class="nav-links">
+        <button class="nav-btn active" onclick="showTab('dashboard')" id="nav-dashboard">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
+          Dashboard Summary
+        </button>
+        <button class="nav-btn" onclick="showTab('audit')" id="nav-audit">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          Alert Audit Trail
+        </button>
+        <button class="nav-btn" onclick="showTab('consent')" id="nav-consent">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          Consent Controls
+        </button>
+        <button class="nav-btn" onclick="showTab('metrics')" id="nav-metrics">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+          Time-Split Metrics
+        </button>
+      </nav>
+
+      <div class="system-status-card">
+        <div class="status-indicator">
+          <span class="pulse-dot active"></span>
+          <span class="status-title">Detector Online</span>
+        </div>
+        <div class="status-desc">Single-merchant defense engine active. Opt-in gated.</div>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      <!-- Top Bar with Simulator Controls -->
+      <header class="top-bar">
+        <div class="top-bar-left">
+          <h1 id="pageTitle">Merchant Risk Overview</h1>
+          <p id="pageSubtitle" class="page-subtitle">Real-time fraud-rate tracking and moving baseline analysis</p>
+        </div>
+        <div class="simulator-controls">
+          <div class="sim-pill">
+            <span class="sim-label">Live Simulator</span>
+            <div class="sim-btn-group">
+              <button id="btnPlay" class="control-btn play-btn" onclick="toggleSimulator()" title="Play / Pause Replay">
+                <span id="playIcon">▶ Run</span>
+              </button>
+              <button class="control-btn step-btn" onclick="stepSimulator()" title="Step one transaction">
+                Step
+              </button>
+              <button class="control-btn burst-btn" onclick="triggerFraudBurst()" title="Simulate coordinated high-risk attack">
+                ⚡ Inject Fraud Burst
+              </button>
+              <button class="control-btn reset-btn" onclick="resetSimulator()" title="Reset buffer">
+                ↺ Reset
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <!-- TAB 1: DASHBOARD SUMMARY -->
+      <section id="tab-dashboard" class="tab-pane active">
+        <!-- Metric Cards Grid -->
+        <div class="metrics-grid">
+          <div class="metric-card">
+            <div class="metric-header">
+              <span class="metric-label">Current Window Fraud Rate</span>
+              <span class="metric-badge" id="rateStatusBadge">Normal</span>
+            </div>
+            <div class="metric-value-row">
+              <span class="metric-value" id="currentFraudRate">0.0%</span>
+              <span class="metric-trend" id="fraudRateDelta">vs baseline</span>
+            </div>
+            <div class="metric-progress-bar">
+              <div class="progress-fill" id="rateProgressFill" style="width: 5%;"></div>
+            </div>
+          </div>
+
+          <div class="metric-card">
+            <div class="metric-header">
+              <span class="metric-label">Historical Baseline Mean</span>
+              <span class="metric-tag">300-tx window</span>
+            </div>
+            <div class="metric-value-row">
+              <span class="metric-value" id="baselineFraudRate">3.5%</span>
+              <span class="metric-subtext">Nominal tolerance</span>
+            </div>
+            <div class="metric-footer-note">Rolling background normal rate</div>
+          </div>
+
+          <div class="metric-card">
+            <div class="metric-header">
+              <span class="metric-label">Spike Alert Threshold</span>
+              <span class="metric-tag danger">+2.5σ Z-score</span>
+            </div>
+            <div class="metric-value-row">
+              <span class="metric-value" id="spikeThresholdVal">2.50σ</span>
+              <span class="metric-subtext" id="activeSpikeAlerts">0 Active Spikes</span>
+            </div>
+            <div class="metric-footer-note">Triggers on statistical concentration</div>
+          </div>
+
+          <div class="metric-card">
+            <div class="metric-header">
+              <span class="metric-label">Signal Sharing Consent</span>
+              <span class="metric-badge" id="consentSummaryBadge">Opted-Out</span>
+            </div>
+            <div class="metric-value-row">
+              <span class="metric-value" id="consentStateText">Isolated</span>
+              <button class="text-link-btn" onclick="showTab('consent')">Edit Settings →</button>
+            </div>
+            <div class="metric-footer-note">Single-merchant protection guaranteed</div>
+          </div>
+        </div>
+
+        <!-- Live Chart & Alert List Grid -->
+        <div class="grid-2col">
+          <!-- Chart Panel -->
+          <div class="panel-card chart-panel">
+            <div class="panel-header">
+              <div>
+                <h3 class="panel-title">Fraud Probability & Spike Threshold (Moving Stream)</h3>
+                <p class="panel-desc">Real-time transactions plotted with statistical anomaly boundary</p>
+              </div>
+              <div class="chart-legend">
+                <span class="legend-item"><span class="legend-dot current"></span> Tx Score</span>
+                <span class="legend-item"><span class="legend-dot threshold"></span> 2.5σ Threshold</span>
+              </div>
+            </div>
+            <div class="chart-container">
+              <canvas id="fraudChart" width="600" height="230"></canvas>
+            </div>
+          </div>
+
+          <!-- Live Ingestion Stream Feed -->
+          <div class="panel-card stream-panel">
+            <div class="panel-header">
+              <div>
+                <h3 class="panel-title">Live Transaction Ingestion Feed</h3>
+                <p class="panel-desc">Real-time feature scoring and consent queue routing</p>
+              </div>
+              <span class="stream-live-pill"><span class="pulse-dot"></span> Streaming</span>
+            </div>
+            <div class="stream-list" id="streamList">
+              <div class="empty-state-sm">Waiting for incoming transactions... Click <b>Run</b> or <b>Step</b> above.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recent Alerts Table -->
+        <div class="panel-card">
+          <div class="panel-header">
+            <div>
+              <h3 class="panel-title">Recent Flagged Fraud Spikes</h3>
+              <p class="panel-desc">Time-window anomalies with attached explainable audit records</p>
+            </div>
+          </div>
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Alert ID</th>
+                  <th>Timestamp</th>
+                  <th>Spike Z-Score</th>
+                  <th>Window Rate</th>
+                  <th>Severity</th>
+                  <th>Primary Driver / Reason</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="alertsTableBody">
+                <tr>
+                  <td colspan="7" class="empty-table-msg">No alerts triggered yet. Click "Inject Fraud Burst" to simulate an attack spike.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 2: ALERT AUDIT & DETAIL -->
+      <section id="tab-audit" class="tab-pane">
+        <div class="audit-selection-bar">
+          <label for="auditAlertSelect">Select Alert for Audit Inspection:</label>
+          <select id="auditAlertSelect" onchange="loadAuditDetail(this.value)">
+            <option value="">-- Choose an alert --</option>
+          </select>
+        </div>
+
+        <div id="auditContentContainer" class="audit-container">
+          <div class="audit-hero-card" id="auditHeroCard">
+            <div class="audit-hero-header">
+              <div class="audit-badge-row">
+                <span class="alert-severity-badge critical" id="auditSeverity">CRITICAL</span>
+                <span class="audit-id-tag" id="auditAlertId">alt_demo_01</span>
+                <span class="model-ver-tag" id="auditModelVer">Model: v1.0-rf-tree-path</span>
+              </div>
+              <div class="audit-timestamp" id="auditTimestamp">2026-08-30 18:20:00 UTC</div>
+            </div>
+            
+            <h2 class="audit-headline" id="auditHeadline">Statistically abnormal fraud velocity detected (+4.2σ)</h2>
+            <p class="audit-narrative" id="auditNarrative">Window fraud rate surged to 72.4% (historical baseline is 3.5%). The primary driver was Unusually high transaction velocity from one device.</p>
+            
+            <div class="counterfactual-box" id="auditCounterfactual">
+              <div class="cf-icon">💡</div>
+              <div class="cf-content">
+                <strong>Counterfactual Analysis:</strong>
+                <p id="counterfactualText">If device transaction velocity remained under 2 requests per 15-min window, the window fraud rate would have stayed at ~0.06, and no alert would have fired.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Feature Contribution Breakdown -->
+          <div class="grid-2col">
+            <div class="panel-card">
+              <div class="panel-header">
+                <div>
+                  <h3 class="panel-title">Top Contributing Risk Drivers</h3>
+                  <p class="panel-desc">Tree path attribution and feature weight distribution</p>
+                </div>
+              </div>
+              <div class="feature-contributions-list" id="featureContributionsList">
+                <!-- Dynamically filled -->
+              </div>
+            </div>
+
+            <div class="panel-card">
+              <div class="panel-header">
+                <div>
+                  <h3 class="panel-title">Raw Window Statistics</h3>
+                  <p class="panel-desc">Window context captured at alert generation time</p>
+                </div>
+              </div>
+              <div class="stats-key-value-list" id="rawStatsList">
+                <!-- Dynamically filled -->
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 3: CONSENT CONTROLS -->
+      <section id="tab-consent" class="tab-pane">
+        <div class="consent-grid">
+          <div class="panel-card consent-main-card">
+            <div class="consent-header">
+              <div class="consent-icon-shield">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              </div>
+              <div>
+                <h2 class="consent-title">Cross-Merchant Signal Sharing Consent</h2>
+                <p class="consent-subtitle">Full transparency and merchant autonomy (Default: Opt-Out)</p>
+              </div>
+            </div>
+
+            <div class="consent-toggle-row">
+              <div class="consent-toggle-info">
+                <span class="toggle-main-label">Allow Transaction Signals into Shared Network Pool</span>
+                <span class="toggle-sub-label">When enabled, anonymized anomaly vectors are queued for cross-merchant intelligence models.</span>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="consentToggle" onchange="toggleConsent(this.checked)">
+                <span class="slider round"></span>
+              </label>
+            </div>
+
+            <div class="consent-guarantees">
+              <div class="guarantee-item">
+                <div class="g-icon">🛡️</div>
+                <div class="g-text">
+                  <strong>Uncompromised Local Protection</strong>
+                  <p>Your single-merchant fraud spike detection runs with 100% full capacity at all times, whether this toggle is on or off.</p>
+                </div>
+              </div>
+              <div class="guarantee-item">
+                <div class="g-icon">🔒</div>
+                <div class="g-text">
+                  <strong>Zero Undisclosed Sharing</strong>
+                  <p>Unlike black-box risk providers, your data is never pooled or correlated across merchants without explicit, recorded consent.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Consent Audit Changelog -->
+          <div class="panel-card">
+            <div class="panel-header">
+              <div>
+                <h3 class="panel-title">Consent Setting Audit History</h3>
+                <p class="panel-desc">Immutable audit changelog of setting updates</p>
+              </div>
+            </div>
+            <div class="table-container">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Timestamp</th>
+                    <th>Previous</th>
+                    <th>New State</th>
+                    <th>Reason / Actor</th>
+                  </tr>
+                </thead>
+                <tbody id="consentHistoryTableBody">
+                  <!-- Dynamically filled -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 4: TIME-SPLIT EVALUATION METRICS -->
+      <section id="tab-metrics" class="tab-pane">
+        <div class="metrics-hero-banner">
+          <div class="banner-badge">Honest Methodology Verification</div>
+          <h2>Time-Based Evaluation (No Lookahead Bias)</h2>
+          <p>Trained strictly on earlier temporal slices; tested on future transactions. Real-world generalization benchmark vs black-box marketing claims.</p>
+          <div class="split-date-tag">
+            <span>Evaluation Split Date: </span>
+            <strong id="evalSplitDate">2026-01-01 00:00:00 UTC</strong>
+          </div>
+        </div>
+
+        <div class="metrics-grid">
+          <div class="metric-card highlight">
+            <div class="metric-header">
+              <span class="metric-label">Precision (Held-Out)</span>
+              <span class="metric-tag success">Verified</span>
+            </div>
+            <div class="metric-value-row">
+              <span class="metric-value" id="metricPrecision">--%</span>
+            </div>
+            <div class="metric-footer-note">Reliability of triggered fraud flags</div>
+          </div>
+
+          <div class="metric-card highlight">
+            <div class="metric-header">
+              <span class="metric-label">Recall (Held-Out)</span>
+              <span class="metric-tag success">Verified</span>
+            </div>
+            <div class="metric-value-row">
+              <span class="metric-value" id="metricRecall">--%</span>
+            </div>
+            <div class="metric-footer-note">Proportion of fraud bursts caught</div>
+          </div>
+
+          <div class="metric-card">
+            <div class="metric-header">
+              <span class="metric-label">False Positive Rate</span>
+              <span class="metric-tag info">Honest</span>
+            </div>
+            <div class="metric-value-row">
+              <span class="metric-value" id="metricFPR">--%</span>
+            </div>
+            <div class="metric-footer-note">Benign transactions flagged</div>
+          </div>
+
+          <div class="metric-card danger-card">
+            <div class="metric-header">
+              <span class="metric-label">Est. False Positive Cost</span>
+              <span class="metric-tag warning">$14.50 / FP unit</span>
+            </div>
+            <div class="metric-value-row">
+              <span class="metric-value" id="metricFPCost">$0.00</span>
+            </div>
+            <div class="metric-footer-note">Operational friction & investigation cost</div>
+          </div>
+        </div>
+
+        <!-- Comparative Contrast Table -->
+        <div class="panel-card comparison-panel">
+          <div class="panel-header">
+            <div>
+              <h3 class="panel-title">Methodological Honesty: Our System vs Vulcan Baseline</h3>
+              <p class="panel-desc">Direct contrast on transparency, consent, and auditability</p>
+            </div>
+          </div>
+          <div class="table-container">
+            <table class="data-table comp-table">
+              <thead>
+                <tr>
+                  <th>Dimension</th>
+                  <th>Vulcan / Black-Box Competitor</th>
+                  <th>Our Fraud-Spike Detector</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Evaluation Split</strong></td>
+                  <td>Undisclosed / Typically optimistic random split</td>
+                  <td><span class="badge-success">Strict time-based train/test split</span></td>
+                </tr>
+                <tr>
+                  <td><strong>Alert Explainability</strong></td>
+                  <td>Black-box probability score without attribution</td>
+                  <td><span class="badge-success">Full plain-language audit trail & SHAP contributions</span></td>
+                </tr>
+                <tr>
+                  <td><strong>Data Sharing & Consent</strong></td>
+                  <td>Forced cross-merchant pooling without consent</td>
+                  <td><span class="badge-success">Strictly opt-in, default isolated single-merchant</span></td>
+                </tr>
+                <tr>
+                  <td><strong>False Positive Cost</strong></td>
+                  <td>Hidden / Not reported</td>
+                  <td><span class="badge-success">Explicitly computed & reported dollar impact</span></td>
+                </tr>
+                <tr>
+                  <td><strong>Counterfactual Guidance</strong></td>
+                  <td>None</td>
+                  <td><span class="badge-success">Clear condition explaining what would prevent alert</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,65 @@
+# Plan directory
+plan/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+fraud_detector.db
+
+# Model artifacts & caches
+*.joblib
+backend/artifacts/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Python Environments
+.Python
+env/
+venv/
+.venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Graphify output
+graphify-out/
+
+# Node / Frontend
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+dist-ssr/
+*.local
+
+# Environment variables & secrets
+.env
+.env.*
+*.pem
+*.key
+*.cert
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
