@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RiskShield Architecture | Interactive Visual Diagram</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #060911;
+      --bg-card: #0d1527;
+      --bg-node: #111d35;
+      --bg-node-hover: #1a2a4b;
+      --border-color: rgba(255, 255, 255, 0.08);
+      --border-glow: rgba(59, 130, 246, 0.4);
+      --text-main: #f8fafc;
+      --text-sub: #94a3b8;
+      --text-muted: #64748b;
+      --accent-blue: #3b82f6;
+      --accent-cyan: #06b6d4;
+      --accent-emerald: #10b981;
+      --accent-rose: #f43f5e;
+      --accent-amber: #f59e0b;
+      --accent-indigo: #818cf8;
+      --font-display: 'Space Grotesk', sans-serif;
+      --font-body: 'Plus Jakarta Sans', sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+    .light-theme {
+      --bg-dark: #f8fafc;
+      --bg-card: #ffffff;
+      --bg-node: #f1f5f9;
+      --bg-node-hover: #e2e8f0;
+      --border-color: rgba(0, 0, 0, 0.08);
+      --border-glow: rgba(37, 99, 235, 0.4);
+      --text-main: #0f172a;
+      --text-sub: #475569;
+      --text-muted: #94a3b8;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: var(--font-body);
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      min-height: 100vh;
+      overflow-x: hidden;
+      transition: background-color 0.3s ease, color 0.3s ease;
+    }
+
+    .top-header {
+      padding: 20px 32px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border-color);
+      background-color: var(--bg-card);
+    }
+    .brand-title {
+      font-family: var(--font-display);
+      font-size: 1.35rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      background: linear-gradient(to right, #38bdf8, #818cf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .header-tagline {
+      font-size: 0.8rem;
+      color: var(--text-sub);
+    }
+    .controls-bar {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+    .btn {
+      padding: 8px 14px;
+      font-family: var(--font-display);
+      font-size: 0.82rem;
+      font-weight: 600;
+      border-radius: 6px;
+      border: 1px solid var(--border-color);
+      background: var(--bg-node);
+      color: var(--text-main);
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .btn:hover {
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 10px rgba(59, 130, 246, 0.3);
+    }
+
+    .canvas-layout {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 20px;
+      padding: 24px 32px;
+      max-width: 1700px;
+      margin: 0 auto;
+    }
+    @media (max-width: 1200px) {
+      .canvas-layout { grid-template-columns: 1fr; }
+    }
+
+    .svg-wrapper {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 24px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+      position: relative;
+    }
+    svg {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    /* SVG Interactive Elements */
+    .arch-node {
+      cursor: pointer;
+      transition: all 0.25s ease;
+    }
+    .arch-node rect {
+      transition: all 0.25s ease;
+    }
+    .arch-node:hover rect {
+      stroke: var(--accent-cyan);
+      stroke-width: 2.5px;
+      filter: drop-shadow(0 0 12px rgba(6, 182, 212, 0.5));
+    }
+    .arch-node.active rect {
+      stroke: var(--accent-rose);
+      stroke-width: 3px;
+      filter: drop-shadow(0 0 16px rgba(244, 63, 94, 0.6));
+    }
+
+    .flow-line {
+      stroke-dasharray: 6;
+      animation: flowTrace 30s linear infinite;
+    }
+    @keyframes flowTrace {
+      to { stroke-dashoffset: -1000; }
+    }
+
+    /* Inspector Side Panel */
+    .inspector-panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      height: fit-content;
+    }
+    .inspector-header {
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 12px;
+    }
+    .node-type-badge {
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: var(--accent-cyan);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .inspector-title {
+      font-family: var(--font-display);
+      font-size: 1.25rem;
+      font-weight: 700;
+      margin-top: 4px;
+    }
+    .inspector-desc {
+      font-size: 0.88rem;
+      color: var(--text-sub);
+      line-height: 1.5;
+    }
+    .tech-pill-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .tech-pill {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      padding: 3px 8px;
+      border-radius: 4px;
+      background: var(--bg-node);
+      border: 1px solid var(--border-color);
+      color: #93c5fd;
+    }
+    .metrics-box {
+      background: var(--bg-node);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .metrics-label {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+    .metrics-val {
+      font-family: var(--font-mono);
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--accent-emerald);
+    }
+  </style>
+</head>
+<body>
+  <header class="top-header">
+    <div>
+      <div class="brand-title">RiskShield: System Architecture</div>
+      <div class="header-tagline">Explainable Single-Merchant Fraud-Spike Telemetry Engine (Track 02)</div>
+    </div>
+    <div class="controls-bar">
+      <button class="btn" onclick="toggleTheme()">🌓 Toggle Light/Dark</button>
+      <button class="btn" onclick="resetView()">↺ Reset Focus</button>
+    </div>
+  </header>
+
+  <main class="canvas-layout">
+    <div class="svg-wrapper">
+      <svg viewBox="0 0 1000 640" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="gradIngest" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#1e293b"/>
+            <stop offset="100%" stop-color="#0f172a"/>
+          </linearGradient>
+          <linearGradient id="gradML" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#1e3a8a"/>
+            <stop offset="100%" stop-color="#172554"/>
+          </linearGradient>
+          <linearGradient id="gradSpike" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#881337"/>
+            <stop offset="100%" stop-color="#4c0519"/>
+          </linearGradient>
+          <linearGradient id="gradConsent" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#064e3b"/>
+            <stop offset="100%" stop-color="#022c22"/>
+          </linearGradient>
+          <linearGradient id="gradUI" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#312e81"/>
+            <stop offset="100%" stop-color="#1e1b4b"/>
+          </linearGradient>
+
+          <filter id="glow">
+            <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+            <feMerge>
+              <feMergeNode in="coloredBlur"/>
+              <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+          </filter>
+
+          <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 1 L 10 5 L 0 9 z" fill="#38bdf8"/>
+          </marker>
+          <marker id="arrow-danger" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 1 L 10 5 L 0 9 z" fill="#f43f5e"/>
+          </marker>
+          <marker id="arrow-emerald" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 1 L 10 5 L 0 9 z" fill="#10b981"/>
+          </marker>
+        </defs>
+
+        <!-- Layer Boundary Boxes -->
+        <rect x="20" y="20" width="960" height="110" rx="10" fill="none" stroke="rgba(255,255,255,0.06)" stroke-dasharray="4"/>
+        <text x="35" y="42" fill="#64748b" font-family="var(--font-mono)" font-size="11" font-weight="700">LAYER 1: STREAM INGESTION &amp; DEAD-LETTER ROUTING</text>
+
+        <rect x="20" y="150" width="960" height="130" rx="10" fill="none" stroke="rgba(59,130,246,0.15)" stroke-dasharray="4"/>
+        <text x="35" y="172" fill="#60a5fa" font-family="var(--font-mono)" font-size="11" font-weight="700">LAYER 2 &amp; 3: FEATURE ENGINEERING &amp; TREE-PATH ATTRIBUTION CLASSIFIER</text>
+
+        <rect x="20" y="300" width="960" height="140" rx="10" fill="none" stroke="rgba(244,63,94,0.15)" stroke-dasharray="4"/>
+        <text x="35" y="322" fill="#fda4af" font-family="var(--font-mono)" font-size="11" font-weight="700">LAYER 4: IN-MEMORY ROLLING WINDOW &amp; STATISTICAL SPIKE DETECTOR (+2.5σ)</text>
+
+        <rect x="20" y="460" width="960" height="160" rx="10" fill="none" stroke="rgba(16,185,129,0.15)" stroke-dasharray="4"/>
+        <text x="35" y="482" fill="#6ee7b7" font-family="var(--font-mono)" font-size="11" font-weight="700">LAYER 5 &amp; 6: CONSENT GOVERNANCE, AUDIT STORE &amp; 4-SCREEN TELEMETRY UI</text>
+
+        <!-- Flow Lines -->
+        <!-- Stream -> Ingest -->
+        <line x1="210" y1="75" x2="280" y2="75" stroke="#38bdf8" stroke-width="2" class="flow-line" marker-end="url(#arrow)"/>
+        <!-- Ingest -> Feature Extractor -->
+        <path d="M 380 75 L 430 75 L 430 215 L 230 215" fill="none" stroke="#38bdf8" stroke-width="2" class="flow-line" marker-end="url(#arrow)"/>
+        <!-- Feature Extractor -> Classifier -->
+        <line x1="230" y1="215" x2="350" y2="215" stroke="#38bdf8" stroke-width="2" class="flow-line" marker-end="url(#arrow)"/>
+        <!-- Classifier -> Rolling Buffer -->
+        <path d="M 530 215 L 600 215 L 600 365 L 280 365" fill="none" stroke="#38bdf8" stroke-width="2" class="flow-line" marker-end="url(#arrow)"/>
+        <!-- Rolling Buffer -> Spike Detector -->
+        <line x1="280" y1="365" x2="400" y2="365" stroke="#38bdf8" stroke-width="2" class="flow-line" marker-end="url(#arrow)"/>
+        <!-- Spike Detector -> Audit Store -->
+        <line x1="600" y1="365" x2="700" y2="365" stroke="#f43f5e" stroke-width="2" class="flow-line" marker-end="url(#arrow-danger)"/>
+        <!-- Spike Detector -> Consent Layer -->
+        <path d="M 500 395 L 500 535 L 260 535" fill="none" stroke="#10b981" stroke-width="2" class="flow-line" marker-end="url(#arrow-emerald)"/>
+        <!-- Consent -> Shared Queue (Gated) -->
+        <line x1="260" y1="535" x2="360" y2="535" stroke="#f59e0b" stroke-width="2" stroke-dasharray="3" marker-end="url(#arrow)"/>
+        <!-- Audit Store -> Telemetry UI -->
+        <path d="M 800 395 L 800 535 L 720 535" fill="none" stroke="#38bdf8" stroke-width="2" class="flow-line" marker-end="url(#arrow)"/>
+        <!-- Eval Harness -> UI -->
+        <line x1="510" y1="535" x2="560" y2="535" stroke="#818cf8" stroke-width="2" class="flow-line" marker-end="url(#arrow)"/>
+
+        <!-- Nodes -->
+        <!-- 1. StreamSimulator -->
+        <g class="arch-node active" id="node-sim" onclick="selectNode('sim')">
+          <rect x="50" y="50" width="160" height="50" rx="8" fill="url(#gradIngest)" stroke="#38bdf8" stroke-width="1.5"/>
+          <text x="130" y="73" fill="#fff" font-family="var(--font-display)" font-size="12" font-weight="700" text-anchor="middle">StreamSimulator</text>
+          <text x="130" y="88" fill="#94a3b8" font-family="var(--font-mono)" font-size="9.5" text-anchor="middle">simulator.py</text>
+        </g>
+
+        <!-- 2. POST /ingest -->
+        <g class="arch-node" id="node-ingest" onclick="selectNode('ingest')">
+          <rect x="280" y="50" width="150" height="50" rx="8" fill="url(#gradIngest)" stroke="#38bdf8" stroke-width="1.5"/>
+          <text x="355" y="73" fill="#fff" font-family="var(--font-display)" font-size="12" font-weight="700" text-anchor="middle">POST /ingest</text>
+          <text x="355" y="88" fill="#94a3b8" font-family="var(--font-mono)" font-size="9.5" text-anchor="middle">app.py / schemas.py</text>
+        </g>
+
+        <!-- 3. DeadLetterDB -->
+        <g class="arch-node" id="node-deadletter" onclick="selectNode('deadletter')">
+          <rect x="740" y="50" width="160" height="50" rx="8" fill="#2d1219" stroke="#f43f5e" stroke-width="1"/>
+          <text x="820" y="73" fill="#fda4af" font-family="var(--font-display)" font-size="12" font-weight="700" text-anchor="middle">DeadLetterDB</text>
+          <text x="820" y="88" fill="#fca5a5" font-family="var(--font-mono)" font-size="9.5" text-anchor="middle">Malformed isolation</text>
+        </g>
+
+        <!-- 4. FeatureExtractor -->
+        <g class="arch-node" id="node-fe" onclick="selectNode('fe')">
+          <rect x="50" y="190" width="180" height="50" rx="8" fill="url(#gradML)" stroke="#60a5fa" stroke-width="1.5"/>
+          <text x="140" y="213" fill="#fff" font-family="var(--font-display)" font-size="12" font-weight="700" text-anchor="middle">FeatureExtractor</text>
+          <text x="140" y="228" fill="#93c5fd" font-family="var(--font-mono)" font-size="9.5" text-anchor="middle">Velocity &amp; Ticket Deviations</text>
+        </g>
+
+        <!-- 5. FraudClassifierEngine -->
+        <g class="arch-node" id="node-classifier" onclick="selectNode('classifier')">
+          <rect x="350" y="190" width="220" height="50" rx="8" fill="url(#gradML)" stroke="#60a5fa" stroke-width="1.5"/>
+          <text x="460" y="213" fill="#fff" font-family="var(--font-display)" font-size="12" font-weight="700" text-anchor="middle">FraudClassifierEngine</text>
+          <text x="460" y="228" fill="#93c5fd" font-family="var(--font-mono)" font-size="9.5" text-anchor="middle">Random Forest + Tree-SHAP</text>
+        </g>
+
+        <!-- 6. MerchantRollingBuffer -->
+        <g class="arch-node" id="node-buffer" onclick="selectNode('buffer')">
+          <rect x="50" y="340" width="230" height="50" rx="8" fill="url(#gradSpike)" stroke="#f43f5e" stroke-width="1.5"/>
+          <text x="165" y="363" fill="#fff" font-family="var(--font-display)" font-size="12" font-weight="700" text-anchor="middle">MerchantRollingBuffer</text>
+          <text x="165" y="378" fill="#fecdd3" font-family="var(--font-mono)" font-size="9.5" text-anchor="middle">15m Window vs 300-tx Baseline</text>
+        </g>
+
+        <!-- 7. SpikeDetectorService -->
+        <g class="arch-node" id="node-spike" onclick="selectNode('spike')">
+          <rect x="400" y="340" width="200" height="50" rx="8" fill="url(#gradSpike)" stroke="#f43f5e" stroke-width="1.5"/>
+          <text x="500" y="363" fill="#fff" font-family="var(--font-display)" font-size="12" font-weight="700" text-anchor="middle">SpikeDetectorService</text>
+          <text x="500" y="378" fill="#fecdd3" font-family="var(--font-mono)" font-size="9.5" text-anchor="middle">Z >= 2.5σ Anomaly Engine</text>
+        </g>
+
+        <!-- 8. Alert & Audit Store -->
+        <g class="arch-node" id="node-audit" onclick="selectNode('audit')">
+          <rect x="700" y="340" width="200" height="50" rx="8" fill="url(#gradSpike)" stroke="#f43f5e" stroke-width="1.5"/>
+          <text x="800" y="363" fill="#fff" font-family="var(--font-display)" font-size="12" font-weight="700" text-anchor="middle">AlertDB &amp; AuditRecordDB</text>
+          <text x="800" y="378" fill="#fecdd3" font-family="var(--font-mono)" font-size="9.5" text-anchor="middle">Counterfactuals + Top Features</text>
+        </g>
+
+        <!-- 9. ConsentService -->
+        <g class="arch-node" id="node-consent" onclick="selectNode('consent')">
+          <rect x="50" y="510" width="210" height="50" rx="8" fill="url(#gradConsent)" stroke="#10b981" stroke-width="1.5"/>
+          <text x="155" y="533" fill="#fff" font-family="var(--font-display)" font-size="12" font-weight="700" text-anchor="middle">ConsentService</text>
+          <text x="155" y="548" fill="#a7f3d0" font-family="var(--font-mono)" font-size="9.5" text-anchor="middle">Opt-In Default OFF (Isolated)</text>
+        </g>
+
+        <!-- 10. Shared Queue -->
+        <g class="arch-node" id="node-queue" onclick="selectNode('queue')">
+          <rect x="360" y="510" width="150" height="50" rx="8" fill="#1c1917" stroke="#f59e0b" stroke-width="1.2" stroke-dasharray="3"/>
+          <text x="435" y="533" fill="#fde68a" font-family="var(--font-display)" font-size="11" font-weight="700" text-anchor="middle">Shared Signal Queue</text>
+          <text x="435" y="548" fill="#d97706" font-family="var(--font-mono)" font-size="9" text-anchor="middle">Gated by consent</text>
+        </g>
+
+        <!-- 11. EvaluationHarness -->
+        <g class="arch-node" id="node-eval" onclick="selectNode('eval')">
+          <rect x="560" y="510" width="160" height="50" rx="8" fill="url(#gradUI)" stroke="#818cf8" stroke-width="1.5"/>
+          <text x="640" y="533" fill="#fff" font-family="var(--font-display)" font-size="12" font-weight="700" text-anchor="middle">EvaluationHarness</text>
+          <text x="640" y="548" fill="#c7d2fe" font-family="var(--font-mono)" font-size="9.5" text-anchor="middle">Time-Split Benchmark</text>
+        </g>
+
+        <!-- 12. 4-Screen Telemetry Dashboard -->
+        <g class="arch-node" id="node-ui" onclick="selectNode('ui')">
+          <rect x="760" y="510" width="180" height="50" rx="8" fill="url(#gradUI)" stroke="#38bdf8" stroke-width="1.5"/>
+          <text x="850" y="533" fill="#fff" font-family="var(--font-display)" font-size="12" font-weight="700" text-anchor="middle">Telemetry Dashboard</text>
+          <text x="850" y="548" fill="#93c5fd" font-family="var(--font-mono)" font-size="9.5" text-anchor="middle">4 Responsive Screens</text>
+        </g>
+      </svg>
+    </div>
+
+    <!-- Right Side Inspector Panel -->
+    <aside class="inspector-panel" id="inspector">
+      <div class="inspector-header">
+        <span class="node-type-badge" id="insp-type">SIMULATION &amp; INGESTION</span>
+        <h2 class="inspector-title" id="insp-title">StreamSimulator</h2>
+      </div>
+      <p class="inspector-desc" id="insp-desc">
+        Generates and replays realistic continuous merchant transaction streams following PaySim and IEEE-CIS distributions. Equipped with interactive play, pause, single-step, and coordinated attack burst injection for live judge demonstrations.
+      </p>
+      
+      <div class="metrics-box">
+        <span class="metrics-label">Associated Source File</span>
+        <span class="metrics-val" id="insp-file">backend/simulator.py</span>
+      </div>
+
+      <div class="metrics-box">
+        <span class="metrics-label">Graph Centrality / Edges</span>
+        <span class="metrics-val" id="insp-edges">11 Edges (God Node #1)</span>
+      </div>
+
+      <div>
+        <span class="metrics-label">Key Capabilities</span>
+        <div class="tech-pill-list" id="insp-tags">
+          <span class="tech-pill">Time-Ordered Replay</span>
+          <span class="tech-pill">Burst Injection</span>
+          <span class="tech-pill">Threaded Engine</span>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <script>
+    const nodeDetails = {
+      sim: {
+        type: "SIMULATION & INGESTION",
+        title: "StreamSimulator",
+        file: "backend/simulator.py",
+        edges: "11 Edges (God Node #1)",
+        desc: "Generates and replays realistic continuous merchant transaction streams following PaySim and IEEE-CIS distributions. Equipped with interactive play, pause, single-step, and coordinated attack burst injection for live judge demonstrations.",
+        tags: ["Time-Ordered Replay", "Burst Injection", "Threaded Engine"]
+      },
+      ingest: {
+        type: "API GATEWAY",
+        title: "POST /ingest",
+        file: "backend/app.py & backend/schemas.py",
+        edges: "9 Edges (Ingestion Gateway)",
+        desc: "Ingests single transactions in real-time, executing schema validation with Pydantic, invoking feature extraction and scoring, updating the merchant rolling buffer, and persisting transactions into SQLite.",
+        tags: ["FastAPI Route", "Dead-Letter Handler", "Pydantic Schemas"]
+      },
+      deadletter: {
+        type: "SAFETY & ERROR ISOLATION",
+        title: "DeadLetterDB",
+        file: "backend/database.py",
+        edges: "4 Edges (Fault Tolerance)",
+        desc: "Catches malformed, corrupt, or invalid transaction payloads without crashing the active ingestion pipeline, enabling post-incident forensic audits and telemetry logging.",
+        tags: ["Crash Prevention", "Error Quarantine", "Forensic Log"]
+      },
+      fe: {
+        type: "FEATURE ENGINEERING",
+        title: "FeatureExtractor",
+        file: "backend/classifier.py",
+        edges: "8 Edges (Velocity Extraction)",
+        desc: "Extracts real-time velocity features (15-min device count, 1-hour IP concentration), ticket size deviation relative to historical merchant averages, and off-hour transaction indicators.",
+        tags: ["15m Velocity", "1h IP Clustering", "Ticket Deviation", "Night-Hour Flag"]
+      },
+      classifier: {
+        type: "ML CLASSIFIER & ATTRIBUTION",
+        title: "FraudClassifierEngine",
+        file: "backend/classifier.py",
+        edges: "9 Edges (God Node #6)",
+        desc: "Calibrated Random Forest classifier producing per-transaction fraud probabilities. Translates tree decision paths into plain-language human descriptions and attribution scores.",
+        tags: ["Random Forest", "Tree-Path Attribution", "Explainability Engine"]
+      },
+      buffer: {
+        type: "STATEFUL SLIDING WINDOW",
+        title: "MerchantRollingBuffer",
+        file: "backend/spike_detector.py",
+        edges: "7 Edges (Sliding Window)",
+        desc: "Maintains a 15-minute rolling window buffer of recent transaction probabilities per merchant alongside a 300-sample clean historical baseline buffer to prevent burst contamination.",
+        tags: ["In-Memory Buffer", "Historical Baseline", "Contamination Guard"]
+      },
+      spike: {
+        type: "STATISTICAL SPIKE DETECTOR",
+        title: "SpikeDetectorService",
+        file: "backend/spike_detector.py",
+        edges: "9 Edges (God Node #7)",
+        desc: "Calculates the statistical Z-score deviation Z = (rate - mean) / std. Triggers alerts when Z >= 2.5σ over moving windows, ensuring idempotent alert creation and counterfactual synthesis.",
+        tags: ["Z-Score >= 2.5σ", "Idempotent Alerts", "Counterfactual Synthesis"]
+      },
+      audit: {
+        type: "EXPLAINABLE AUDIT STORE",
+        title: "AlertDB & AuditRecordDB",
+        file: "backend/database.py",
+        edges: "10 Edges (God Node #4)",
+        desc: "Persists immutable alert records alongside plain-English decision narratives, top 4 contributing feature weights, raw window statistics, and counterfactual condition notes.",
+        tags: ["Immutable Audit", "SHAP Feature Weights", "Counterfactuals", "Raw Telemetry"]
+      },
+      consent: {
+        type: "PRIVACY & GOVERNANCE",
+        title: "ConsentService",
+        file: "backend/consent.py",
+        edges: "8 Edges (God Node #9)",
+        desc: "Enforces single-merchant isolation by defaulting cross-merchant data sharing to OFF. Guarantees 100% full capacity local protection regardless of merchant consent state.",
+        tags: ["Opt-In Default OFF", "Single-Merchant Isolation", "Immutable Changelog"]
+      },
+      queue: {
+        type: "EXTERNAL SIGNAL ROUTER",
+        title: "Shared Signal Queue",
+        file: "backend/consent.py",
+        edges: "3 Edges (Pooled Intelligence)",
+        desc: "Simulated cross-merchant intelligence queue. Signals are only enqueued when a merchant explicitly enables opt-in sharing, ensuring zero undisclosed pooling.",
+        tags: ["Gated Queue", "Anonymized Signals", "Cross-Merchant Pool"]
+      },
+      eval: {
+        type: "OFFLINE EVALUATION HARNESS",
+        title: "EvaluationHarness",
+        file: "backend/eval_harness.py",
+        edges: "6 Edges (Honest Benchmark)",
+        desc: "Executes strict chronological time-based train/test splits (no lookahead bias). Evaluates held-out precision, recall, false-positive rate, and estimated $14.50/unit FP friction cost.",
+        tags: ["Time-Based Split", "Precision/Recall", "FP Cost Accounting", "Vulcan Benchmark"]
+      },
+      ui: {
+        type: "TELEMETRY DASHBOARD",
+        title: "Telemetry Dashboard",
+        file: "frontend/index.html & frontend/app.js",
+        edges: "11 Edges (God Node #2)",
+        desc: "4 responsive screens delivering real-time HUD telemetry: 1) Risk Overview & Canvas Scope, 2) Alert Audit & Explainability, 3) Consent Governance, and 4) Time-Split Metrics.",
+        tags: ["Canvas Telemetry", "Audit Explorer", "Consent Toggle", "Live Ticker"]
+      }
+    };
+
+    function selectNode(nodeKey) {
+      document.querySelectorAll('.arch-node').forEach(el => el.classList.remove('active'));
+      const activeEl = document.getElementById('node-' + nodeKey);
+      if (activeEl) activeEl.classList.add('active');
+
+      const data = nodeDetails[nodeKey];
+      if (!data) return;
+
+      document.getElementById('insp-type').innerText = data.type;
+      document.getElementById('insp-title').innerText = data.title;
+      document.getElementById('insp-file').innerText = data.file;
+      document.getElementById('insp-edges').innerText = data.edges;
+      document.getElementById('insp-desc').innerText = data.desc;
+
+      const tagsContainer = document.getElementById('insp-tags');
+      tagsContainer.innerHTML = data.tags.map(t => `<span class="tech-pill">${t}</span>`).join('');
+    }
+
+    function toggleTheme() {
+      document.body.classList.toggle('light-theme');
+    }
+
+    function resetView() {
+      selectNode('sim');
+    }
+  </script>
+</body>
+</html>
