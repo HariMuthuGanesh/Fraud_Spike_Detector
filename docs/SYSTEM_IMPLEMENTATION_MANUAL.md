@@ -36,44 +36,71 @@ The system is organized into **6 decoupled, production-grade layers**:
 
 ```mermaid
 graph TD
-    subgraph Layer 1: Ingestion & Replay
-        A[Live Simulator / PaySim Stream] -->|POST /ingest| B[FastAPI Gateway]
-        B -->|Malformed Payload| C[DeadLetterDB]
+    subgraph L1 ["Layer 1: Ingestion & Replay"]
+        A["Live Simulator / PaySim Stream"] -->|"POST /ingest"| B["FastAPI Gateway"]
+        B -->|"Malformed Payload"| C["DeadLetterDB"]
     end
 
-    subgraph Layer 2: Feature Engineering
-        B -->|Valid Transaction| D[FeatureExtractor]
-        D -->|15m Device Velocity| E[Feature Vector]
-        D -->|1h IP Concentration| E
-        D -->|Ticket Size Deviation| E
-        D -->|Off-Hour Night Flag| E
+    subgraph L2 ["Layer 2: Feature Engineering"]
+        B -->|"Valid Transaction"| D["FeatureExtractor"]
+        D -->|"15m Device Velocity"| E["Feature Vector"]
+        D -->|"1h IP Concentration"| E
+        D -->|"Ticket Size Deviation"| E
+        D -->|"Off-Hour Night Flag"| E
     end
 
-    subgraph Layer 3: ML Scoring & Explainability
-        E --> F[FraudClassifierEngine]
-        F -->|P(fraud) Probability| G[Scored Event]
-        F -->|Tree Decision Paths| H[Feature Attribution Weights]
+    subgraph L3 ["Layer 3: ML Scoring & Explainability"]
+        E --> F["FraudClassifierEngine"]
+        F -->|"P(fraud) Probability"| G["Scored Event"]
+        F -->|"Tree Decision Paths"| H["Feature Attribution Weights"]
     end
 
-    subgraph Layer 4: Sliding Window & Statistical Spike Detection
-        G --> I[MerchantRollingBuffer]
-        I -->|15-min Moving Window| J[SpikeDetectorService]
-        I -->|300-tx Clean Baseline| J
-        J -->|Z >= 2.5σ Anomaly| K[AlertDB & AuditRecordDB]
+    subgraph L4 ["Layer 4: Sliding Window & Spike Detector"]
+        G --> I["MerchantRollingBuffer"]
+        I -->|"15-min Moving Window"| J["SpikeDetectorService"]
+        I -->|"300-tx Clean Baseline"| J
+        J -->|"Z >= 2.5σ Anomaly"| K["AlertDB & AuditRecordDB"]
     end
 
-    subgraph Layer 5: Privacy & Consent Governance
-        K --> L[ConsentService]
-        L -->|Opt-In = True| M[Shared Signal Queue]
-        L -->|Opt-In = False (Default)| N[Single-Merchant Isolated Store]
+    subgraph L5 ["Layer 5: Privacy & Consent Governance"]
+        K --> L["ConsentService"]
+        L -->|"Opt-In = True"| M["Shared Signal Queue"]
+        L -->|"Opt-In = False (Default)"| N["Single-Merchant Isolated Store"]
     end
 
-    subgraph Layer 6: API & Telemetry UI
-        N --> O[REST API Endpoints]
-        O --> P[4-Screen Telemetry Dashboard]
-        Q[Time-Split Evaluation Harness] --> P
+    subgraph L6 ["Layer 6: API & Telemetry UI"]
+        N --> O["REST API Endpoints"]
+        O --> P["4-Screen Telemetry Dashboard"]
+        Q["Time-Split Evaluation Harness"] --> P
     end
 ```
+
+### Visual Pipeline Flow (Universal Rendering)
+```
+[ Live Transaction Stream (simulator.py) ]
+                    │
+                    ▼ (POST /ingest)
+[ Feature Extraction: 15m Velocity, IP Concentration, Ticket Ratio ]
+                    │
+                    ▼
+[ Random Forest Classifier: Calibrated P(fraud) + Tree-Path Attribution ]
+                    │
+                    ▼
+[ Merchant Rolling Buffer: 15-min Window vs. 300-tx Clean Baseline ]
+                    │
+                    ▼
+[ Statistical Spike Engine: Z = (rate - mean) / std >= 2.5σ Anomaly ]
+                    │
+                    ▼
+[ Explainable Audit Store: Plain Narrative, Feature Weights, Counterfactuals ]
+                    │
+                    ▼
+[ Consent Governance: Opt-In Default OFF (100% Single-Merchant Isolated) ]
+                    │
+                    ▼
+[ 4-Screen Telemetry UI: Scope Canvas, Audit Inspector, Consent, Metrics ]
+```
+> 💡 *An interactive standalone vector diagram is available in [`docs/architecture_diagram.html`](file:///d:/RazorPay/docs/architecture_diagram.html) (open in any web browser for interactive node inspection and trace animations).*
 
 ---
 
