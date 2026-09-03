@@ -45,6 +45,8 @@ graphify-out/
 
 # Node / Frontend
 node_modules/
+frontend/dist/
+frontend/node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
