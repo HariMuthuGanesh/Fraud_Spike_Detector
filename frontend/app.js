@@ -161,11 +161,11 @@ function drawFraudChart(points) {
 
   // Clear background
   ctx.clearRect(0, 0, w, h);
-  ctx.fillStyle = "#0c121e";
+  ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, w, h);
 
-  // Grid lines
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.05)";
+  // Subtle Grid lines
+  ctx.strokeStyle = "#e2e8f0";
   ctx.lineWidth = 1;
   for (let y = 30; y < h; y += 40) {
     ctx.beginPath();
@@ -177,21 +177,21 @@ function drawFraudChart(points) {
   // Draw 2.5σ Threshold line (red dashed line at ~65% risk or score 0.40)
   const thresholdY = h - (0.45 * (h - 60)) - 30;
   ctx.save();
-  ctx.strokeStyle = "#f43f5e";
+  ctx.strokeStyle = "#e11d48";
   ctx.lineWidth = 1.5;
-  ctx.setLineDash([4, 4]);
+  ctx.setLineDash([5, 4]);
   ctx.beginPath();
   ctx.moveTo(40, thresholdY);
   ctx.lineTo(w - 20, thresholdY);
   ctx.stroke();
   
-  ctx.fillStyle = "#fda4af";
-  ctx.font = "10px JetBrains Mono";
-  ctx.fillText("+2.5σ Threshold Line", w - 145, thresholdY - 6);
+  ctx.fillStyle = "#be123c";
+  ctx.font = "bold 10px JetBrains Mono";
+  ctx.fillText("+2.5σ Anomaly Threshold", w - 160, thresholdY - 6);
   ctx.restore();
 
   if (!points || points.length === 0) {
-    ctx.fillStyle = "#6b7280";
+    ctx.fillStyle = "#94a3b8";
     ctx.font = "12px Plus Jakarta Sans";
     ctx.fillText("Awaiting transaction stream points...", w / 2 - 110, h / 2);
     return;
@@ -206,34 +206,34 @@ function drawFraudChart(points) {
     return { x, y, score: p.fraud_score };
   });
 
-  // Area under curve
+  // Area under curve with soft Cobalt Blue gradient
   ctx.beginPath();
   ctx.moveTo(coords[0].x, h - 30);
   coords.forEach(pt => ctx.lineTo(pt.x, pt.y));
   ctx.lineTo(coords[coords.length - 1].x, h - 30);
   ctx.closePath();
   const grad = ctx.createLinearGradient(0, 0, 0, h);
-  grad.addColorStop(0, "rgba(6, 182, 212, 0.35)");
-  grad.addColorStop(1, "rgba(6, 182, 212, 0.0)");
+  grad.addColorStop(0, "rgba(12, 86, 219, 0.16)");
+  grad.addColorStop(1, "rgba(12, 86, 219, 0.0)");
   ctx.fillStyle = grad;
   ctx.fill();
 
-  // Line stroke
+  // Primary Line Stroke - Razorpay Cobalt
   ctx.beginPath();
   ctx.moveTo(coords[0].x, coords[0].y);
   coords.forEach(pt => ctx.lineTo(pt.x, pt.y));
-  ctx.strokeStyle = "#06b6d4";
+  ctx.strokeStyle = "#0c56db";
   ctx.lineWidth = 2.5;
   ctx.stroke();
 
-  // Draw point dots
+  // Draw point dots with crisp white borders
   coords.forEach(pt => {
     ctx.beginPath();
     ctx.arc(pt.x, pt.y, pt.score > 0.4 ? 4.5 : 3, 0, Math.PI * 2);
-    ctx.fillStyle = pt.score > 0.4 ? "#f43f5e" : "#06b6d4";
+    ctx.fillStyle = pt.score > 0.4 ? "#e11d48" : "#0c56db";
     ctx.fill();
-    ctx.strokeStyle = "#fff";
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 1.5;
     ctx.stroke();
   });
 }
