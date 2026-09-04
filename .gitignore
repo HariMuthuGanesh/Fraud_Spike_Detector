@@ -18,9 +18,16 @@ __pycache__/
 .coverage
 htmlcov/
 
-# Raw dataset files
+# Raw dataset files & archives
 data/
+raw_data/
 *.csv
+*.tsv
+*.parquet
+*.zip
+*.gz
+*.tar.gz
+PS_*.csv
 
 # Python Environments
 .Python
