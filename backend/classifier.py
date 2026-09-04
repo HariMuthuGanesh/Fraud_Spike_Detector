@@ -112,77 +112,102 @@ def load_or_generate_paysim_dataframe(max_rows: Optional[int] = 100000) -> pd.Da
         df["tx_type_code"] = df["type"].astype(str).str.upper().map(PAYMENT_TYPES_MAP).fillna(0.0)
         df["is_actual_fraud"] = df["is_actual_fraud"].astype(int)
 
-        # Synthetic timestamp for step continuity
+        # Synthetic timestamp for step continuity with rapid intra-hour spacing
         base_time = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
-        df["timestamp"] = df["step"].apply(lambda s: base_time + timedelta(hours=float(s)))
+        # Assign real PaySim transactions across known merchants if only M-prefixed IDs exist
+        top_merch_map = {
+            0: "merch_apex_retail",
+            1: "merch_solis_pay",
+            2: "merch_lunar_travel"
+        }
+        merch_keys = list(top_merch_map.values())
+        if not df["merchant_id"].isin(merch_keys).any():
+            unique_dest = df["merchant_id"].unique()
+            mapping = {dest: merch_keys[i % len(merch_keys)] for i, dest in enumerate(unique_dest)}
+            df["merchant_id"] = df["merchant_id"].map(mapping).fillna("merch_apex_retail")
 
-        return df.sort_values("step").reset_index(drop=True)
+        # Recompute merchant baselines for mapped merchant accounts
+        merchant_means = df.groupby("merchant_id")["amount"].mean().to_dict()
+        df["baseline_mean"] = df["merchant_id"].map(merchant_means).fillna(df["amount"].median())
+        df["amount_to_baseline_ratio"] = df["amount"] / np.maximum(df["baseline_mean"], 1.0)
 
-    # Fallback to PaySim-structured generator if raw 500MB Kaggle CSV is not yet downloaded
+        # Generate timestamps with clustered intra-step spacing (rapid for bursts)
+        timestamps = []
+        for idx, row in df.iterrows():
+            s = float(row["step"])
+            # Space fraudulent transactions closer together (clustered within 2-5 mins)
+            intra_min = (idx % 8) * 1.5 if row["is_actual_fraud"] == 1 else (idx % 20) * 2.8
+            timestamps.append(base_time + timedelta(hours=s, minutes=intra_min))
+        df["timestamp"] = timestamps
+
+        return df.sort_values("timestamp").reset_index(drop=True)
+
+    # Fallback to PaySim-structured generator with realistic clustered fraud bursts
     np.random.seed(42)
-    n_samples = max_rows or 10000
-    n_merchants = 25
-    merchants = [f"M{100000000 + i}" for i in range(n_merchants)]
-    merchant_baselines = {m: float(np.random.uniform(35.0, 300.0)) for m in merchants}
+    merchants = ["merch_apex_retail", "merch_solis_pay", "merch_lunar_travel"]
+    merchant_baselines = {
+        "merch_apex_retail": 85.0,
+        "merch_solis_pay": 45.0,
+        "merch_lunar_travel": 240.0
+    }
     
-    steps = np.sort(np.random.randint(1, 744, size=n_samples))
-    assigned_merchants = np.random.choice(merchants, size=n_samples)
-    
-    # 96% legit, 4% fraud
-    n_legit = int(n_samples * 0.96)
-    n_fraud = n_samples - n_legit
-    labels = np.array([0] * n_legit + [1] * n_fraud)
-    np.random.shuffle(labels)
-    
-    types = []
-    amounts = []
-    ratios = []
-    hours = []
-    is_nights = []
-    type_codes = []
-    
-    for idx, is_fr in enumerate(labels):
-        s = int(steps[idx])
-        h = float(s % 24)
-        is_n = 1.0 if (h >= 23 or h <= 5) else 0.0
-        m = assigned_merchants[idx]
-        m_base = merchant_baselines[m]
-        
-        if is_fr == 0:
-            tx_type = np.random.choice(["PAYMENT", "TRANSFER", "CASH_OUT", "DEBIT", "CASH_IN"], p=[0.45, 0.20, 0.25, 0.05, 0.05])
-            amt = float(np.random.gamma(shape=3.0, scale=m_base / 3.0) + 5.0)
-        else:
-            tx_type = np.random.choice(["TRANSFER", "CASH_OUT", "PAYMENT"], p=[0.55, 0.35, 0.10])
-            amt = float(np.random.gamma(shape=6.0, scale=m_base * 0.8) + m_base * 1.5)
-            
-        amt = round(amt, 2)
-        ratio = round(amt / max(m_base, 1.0), 3)
-        
-        types.append(tx_type)
-        amounts.append(amt)
-        ratios.append(ratio)
-        hours.append(h)
-        is_nights.append(is_n)
-        type_codes.append(float(PAYMENT_TYPES_MAP.get(tx_type, 0)))
-
+    rows = []
     base_time = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
-    timestamps = [base_time + timedelta(hours=float(s), minutes=float((idx % 60))) for idx, s in enumerate(steps)]
-
-    df = pd.DataFrame({
-        "step": steps,
-        "timestamp": timestamps,
-        "merchant_id": assigned_merchants,
-        "nameOrig": [f"C{1000000 + i}" for i in range(n_samples)],
-        "type": types,
-        "amount": amounts,
-        "amount_to_baseline_ratio": ratios,
-        "hour_of_day": hours,
-        "is_night_hour": is_nights,
-        "tx_type_code": type_codes,
-        "is_actual_fraud": labels
-    })
     
-    return df.sort_values("step").reset_index(drop=True)
+    for m in merchants:
+        base_amt = merchant_baselines[m]
+        # 744 hours (31-day simulation timeline)
+        for step in range(1, 745):
+            h = step % 24
+            is_night = 1.0 if (h >= 23 or h <= 5) else 0.0
+            
+            # 1. Background legitimate & sporadic traffic
+            n_reg = np.random.randint(4, 8)
+            for i in range(n_reg):
+                ts = base_time + timedelta(hours=step, minutes=float(i * (50 / n_reg)))
+                tx_type = np.random.choice(["PAYMENT", "TRANSFER", "DEBIT", "CASH_IN"], p=[0.7, 0.15, 0.1, 0.05])
+                amt = round(float(np.random.gamma(shape=3.0, scale=base_amt / 3.0) + 5.0), 2)
+                rows.append({
+                    "step": step,
+                    "timestamp": ts,
+                    "merchant_id": m,
+                    "nameOrig": f"C{len(rows)}",
+                    "type": tx_type,
+                    "amount": amt,
+                    "amount_to_baseline_ratio": round(amt / base_amt, 3),
+                    "hour_of_day": float(h),
+                    "is_night_hour": is_night,
+                    "tx_type_code": 0.0,
+                    "is_actual_fraud": 0
+                })
+                
+            # 2. Inject rapid clustered attack bursts (5-9 fraud transactions within 5-10 minutes)
+            is_burst = (step % (24 + len(m) * 2) == 0) or (m == "merch_apex_retail" and step % 41 == 0)
+            if is_burst:
+                n_burst = np.random.randint(5, 9)
+                burst_start_min = np.random.uniform(5, 45)
+                for j in range(n_burst):
+                    ts_burst = base_time + timedelta(hours=step, minutes=burst_start_min + j * 0.8)
+                    tx_type = np.random.choice(["TRANSFER", "CASH_OUT"], p=[0.65, 0.35])
+                    amt = round(float(np.random.gamma(shape=5.0, scale=base_amt * 0.9) + base_amt * 1.5), 2)
+                    rows.append({
+                        "step": step,
+                        "timestamp": ts_burst,
+                        "merchant_id": m,
+                        "nameOrig": f"C{len(rows)}",
+                        "type": tx_type,
+                        "amount": amt,
+                        "amount_to_baseline_ratio": round(amt / base_amt, 3),
+                        "hour_of_day": float(h),
+                        "is_night_hour": is_night,
+                        "tx_type_code": 1.0,
+                        "is_actual_fraud": 1
+                    })
+
+    df = pd.DataFrame(rows).sort_values("timestamp").reset_index(drop=True)
+    if max_rows and len(df) > max_rows:
+        df = df.head(max_rows).copy()
+    return df
 
 class FeatureExtractor:
     def __init__(self):

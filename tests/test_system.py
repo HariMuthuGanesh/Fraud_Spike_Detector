@@ -3,16 +3,33 @@ import pytest
 from datetime import datetime, timezone, timedelta
 from fastapi.testclient import TestClient
 
-from backend.database import Base, engine, SessionLocal, init_db, MerchantDB, AlertDB
+# Isolate database for tests before any other imports
+TEST_DB_PATH = os.path.abspath("test_fraud_detector.db")
+os.environ["DB_PATH"] = TEST_DB_PATH
+
+from backend.database import Base, engine, SessionLocal, init_db, reset_db_engine, MerchantDB, AlertDB
 from backend.app import app
 from backend.classifier import classifier_engine
 from backend.spike_detector import spike_detector_service
 from backend.consent import consent_service
 from backend.eval_harness import match_window_events, eval_harness
 
+@pytest.fixture(scope="session", autouse=True)
+def setup_test_db():
+    # Use isolated test SQLite database
+    reset_db_engine(TEST_DB_PATH)
+    init_db()
+    yield
+    # Teardown: close engine and delete test database
+    try:
+        engine.dispose()
+        if os.path.exists(TEST_DB_PATH):
+            os.remove(TEST_DB_PATH)
+    except Exception:
+        pass
+
 @pytest.fixture(scope="module")
 def client():
-    init_db()
     with TestClient(app) as c:
         yield c
 
@@ -122,6 +139,31 @@ def test_consent_layer_invariants(client):
     assert len(history) >= 1
     assert history[0]["new_state"] is True
 
+def test_per_merchant_metrics_are_distinct(client):
+    """
+    Priority 1 & 4 Acceptance Test:
+    Verifies that calling /merchants/{merchant_id}/metrics returns merchant-scoped evaluation metrics.
+    """
+    res_apex = client.get("/merchants/merch_apex_retail/metrics")
+    assert res_apex.status_code == 200
+    data_apex = res_apex.json()
+
+    res_solis = client.get("/merchants/merch_solis_pay/metrics")
+    assert res_solis.status_code == 200
+    data_solis = res_solis.json()
+
+    # Verify merchant_id scoping
+    assert data_apex["merchant_id"] == "merch_apex_retail"
+    assert data_solis["merchant_id"] == "merch_solis_pay"
+
+    # Verify both have valid numerical metrics
+    assert "precision" in data_apex and 0.0 <= data_apex["precision"] <= 1.0
+    assert "recall" in data_apex and 0.0 <= data_apex["recall"] <= 1.0
+    assert "precision" in data_solis and 0.0 <= data_solis["precision"] <= 1.0
+    assert "recall" in data_solis and 0.0 <= data_solis["recall"] <= 1.0
+    assert data_apex["total_test_samples"] > 0
+    assert data_solis["total_test_samples"] > 0
+
 def test_time_split_metrics_endpoint(client):
     res = client.get("/merchants/merch_apex_retail/metrics")
     assert res.status_code == 200
@@ -131,6 +173,7 @@ def test_time_split_metrics_endpoint(client):
     assert "false_positive_cost_estimate" in data
     assert "split_date" in data
     assert "comparison_vs_vulcan" in data
+    assert data["comparison_vs_vulcan"]["metrics_comparison"]["merchant_scoped"] == "merch_apex_retail"
 
 def test_dashboard_summary_endpoint(client):
     res = client.get("/dashboard/summary?merchant_id=merch_apex_retail")

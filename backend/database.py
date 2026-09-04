@@ -14,6 +14,15 @@ engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
+def reset_db_engine(custom_db_path: str):
+    """Rebinds database engine and SessionLocal to a custom or isolated test path."""
+    global engine, SessionLocal, DB_PATH, DATABASE_URL
+    DB_PATH = custom_db_path
+    DATABASE_URL = f"sqlite:///{DB_PATH}"
+    engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+    SessionLocal.configure(bind=engine)
+    return engine
+
 def get_db():
     db = SessionLocal()
     try:
