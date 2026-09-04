@@ -60,7 +60,7 @@ def test_ingest_and_spike_detection_flow(client):
             "merchant_id": merchant_id,
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "amount": 900.0 + (i * 50),
-            "payment_method": "CARD",
+            "payment_method": "TRANSFER",
             "device_hash": "dev_test_attacker_01",
             "ip_hash": "10.0.99.100",
             "is_actual_fraud": True

@@ -57,46 +57,65 @@ def find_paysim_csv_path() -> Optional[str]:
             return os.path.abspath(c)
     return None
 
-def load_or_generate_paysim_dataframe(max_rows: Optional[int] = 50000) -> pd.DataFrame:
+def load_or_generate_paysim_dataframe(max_rows: Optional[int] = 100000) -> pd.DataFrame:
     """
     Loads PaySim transaction data.
-    If a real PaySim CSV is present on disk (PS_20174392719_1491204439457_log.csv), loads it directly.
-    Otherwise, generates a canonical PaySim-structured dataset with 'M'-prefixed merchant accounts,
-    step-based hours, amount deviations, and transaction types.
+    If a real PaySim CSV is present on disk (PS_20174392719_1491204439457_log.csv), loads all fraud
+    records and a balanced representative sample of legitimate transactions with merchant baselines.
+    Otherwise, generates a canonical PaySim-structured dataset.
     """
     csv_path = find_paysim_csv_path()
     if csv_path:
-        # Load from real PaySim CSV
-        df = pd.read_csv(csv_path, nrows=max_rows)
+        # Load from real PaySim CSV using chunked stream
+        fraud_chunks = []
+        legit_chunks = []
+        sample_rate = 0.015 # yields ~95k legit records across 6.36M dataset
+
+        for chunk in pd.read_csv(csv_path, chunksize=250000, usecols=["step", "type", "amount", "nameOrig", "nameDest", "isFraud"]):
+            frauds = chunk[chunk["isFraud"] == 1]
+            if not frauds.empty:
+                fraud_chunks.append(frauds)
+            
+            legit = chunk[chunk["isFraud"] == 0]
+            if not legit.empty:
+                sampled_legit = legit.sample(frac=sample_rate, random_state=42)
+                legit_chunks.append(sampled_legit)
+
+        df_fraud = pd.concat(fraud_chunks, ignore_index=True) if fraud_chunks else pd.DataFrame()
+        df_legit = pd.concat(legit_chunks, ignore_index=True) if legit_chunks else pd.DataFrame()
+        df = pd.concat([df_fraud, df_legit], ignore_index=True).sort_values("step").reset_index(drop=True)
+
+        if max_rows and len(df) > max_rows:
+            # Keep all frauds and limit legit samples
+            n_legit_keep = max(1000, max_rows - len(df_fraud))
+            df = pd.concat([df_fraud, df_legit.head(n_legit_keep)], ignore_index=True).sort_values("step").reset_index(drop=True)
+
         # Ensure standard column names
         df = df.rename(columns={
             "isFraud": "is_actual_fraud",
             "nameDest": "merchant_id"
         })
-        # Group transactions by merchant: PaySim destinations prefixed with 'M' are merchants
+
+        # Calculate merchant historical baseline for 'M' accounts and instrument type averages for 'C' accounts
         is_merchant = df["merchant_id"].astype(str).str.startswith("M")
-        if is_merchant.any():
-            df = df[is_merchant].copy()
-        
-        # Calculate merchant historical average amount
-        merchant_means = df.groupby("merchant_id")["amount"].transform("mean")
-        df["amount_to_baseline_ratio"] = df["amount"] / np.maximum(merchant_means, 1.0)
-        
+        merchant_means = df[is_merchant].groupby("merchant_id")["amount"].mean().to_dict()
+        type_means = df.groupby("type")["amount"].mean().to_dict()
+
+        df["baseline_mean"] = df["merchant_id"].map(merchant_means).fillna(df["type"].map(type_means)).fillna(df["amount"].median())
+        df["amount_to_baseline_ratio"] = df["amount"] / np.maximum(df["baseline_mean"], 1.0)
+
         # Step-derived hour of day (1 step = 1 hour)
         df["hour_of_day"] = (df["step"] % 24).astype(float)
         df["is_night_hour"] = df["hour_of_day"].apply(lambda h: 1.0 if (h >= 23 or h <= 5) else 0.0)
-        
+
         # Transaction type encoding
         df["tx_type_code"] = df["type"].astype(str).str.upper().map(PAYMENT_TYPES_MAP).fillna(0.0)
-        
-        if "is_actual_fraud" not in df.columns and "isFraud" in df.columns:
-            df["is_actual_fraud"] = df["isFraud"]
         df["is_actual_fraud"] = df["is_actual_fraud"].astype(int)
-        
+
         # Synthetic timestamp for step continuity
         base_time = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
         df["timestamp"] = df["step"].apply(lambda s: base_time + timedelta(hours=float(s)))
-        
+
         return df.sort_values("step").reset_index(drop=True)
 
     # Fallback to PaySim-structured generator if raw 500MB Kaggle CSV is not yet downloaded
@@ -329,5 +348,37 @@ class FraudClassifierEngine:
             return "Standard payment profile."
         return f"Feature value {val:.2f} relative to baseline distribution."
 
+    def train(self, max_rows: int = 100000) -> Dict[str, Any]:
+        """Explicitly train model on PaySim dataset and persist to MODEL_PATH."""
+        print(f"[Classifier] Loading PaySim data (max_rows={max_rows})...")
+        df = load_or_generate_paysim_dataframe(max_rows=max_rows)
+        X = df[FEATURE_NAMES].values
+        y = df["is_actual_fraud"].values
+
+        print(f"[Classifier] Training RandomForest on {len(df)} samples ({int(y.sum())} fraud, {len(df) - int(y.sum())} legit)...")
+        self.model = RandomForestClassifier(
+            n_estimators=60,
+            max_depth=7,
+            min_samples_split=4,
+            random_state=42,
+            class_weight="balanced"
+        )
+        self.model.fit(X, y)
+        joblib.dump(self.model, MODEL_PATH)
+        print(f"[Classifier] Model successfully saved to {MODEL_PATH}")
+
+        # Compute feature importances
+        importances = dict(zip(FEATURE_NAMES, [round(float(v), 4) for v in self.model.feature_importances_]))
+        return {
+            "n_samples": len(df),
+            "n_fraud": int(y.sum()),
+            "feature_importances": importances,
+            "model_path": MODEL_PATH
+        }
+
 # Global singleton classifier instance (shared across live server and eval harness)
 classifier_engine = FraudClassifierEngine()
+
+if __name__ == "__main__":
+    summary = classifier_engine.train()
+    print("[Classifier] Training Summary:", summary)

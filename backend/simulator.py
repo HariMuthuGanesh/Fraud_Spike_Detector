@@ -85,8 +85,8 @@ class StreamSimulator:
                     "id": f"tx_{uuid.uuid4().hex[:10]}",
                     "merchant_id": merchant_id,
                     "timestamp": self.current_sim_time,
-                    "amount": round(random.uniform(400.0, 1200.0), 2),
-                    "payment_method": "CARD",
+                    "amount": round(random.uniform(800.0, 3500.0), 2),
+                    "payment_method": random.choice(["TRANSFER", "NETBANKING"]),
                     "device_hash": target_device,
                     "ip_hash": target_ip,
                     "is_actual_fraud": True

@@ -18,6 +18,10 @@ __pycache__/
 .coverage
 htmlcov/
 
+# Raw dataset files
+data/
+*.csv
+
 # Python Environments
 .Python
 env/
