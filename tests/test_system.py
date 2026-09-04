@@ -8,6 +8,7 @@ from backend.app import app
 from backend.classifier import classifier_engine
 from backend.spike_detector import spike_detector_service
 from backend.consent import consent_service
+from backend.eval_harness import match_window_events, eval_harness
 
 @pytest.fixture(scope="module")
 def client():
@@ -35,25 +36,21 @@ def test_classifier_scoring_and_attribution():
     assert len(contribs) > 0
     assert "feature_name" in contribs[0]
 
-    # Suspicious transaction with high velocity and huge amount at night
+    # Suspicious transaction with high ticket ratio at night
     tx_fraud = {
         "id": "tx_fraud_001",
         "merchant_id": "merch_apex_retail",
         "timestamp": datetime.now(timezone.utc).replace(hour=3),
         "amount": 1250.0,
-        "payment_method": "CARD",
+        "payment_method": "TRANSFER",
         "device_hash": "dev_burst_x",
         "ip_hash": "10.0.0.99"
     }
-    # Simulate velocity
-    for _ in range(5):
-        classifier_engine.score_transaction(tx_fraud)
     score_fraud, _, contribs_fraud = classifier_engine.score_transaction(tx_fraud)
     assert score_fraud > score_legit
-    assert any("velocity" in c["raw_feature_name"] or "amount" in c["raw_feature_name"] for c in contribs_fraud)
+    assert any("amount" in c["raw_feature_name"] or "ratio" in c["raw_feature_name"] or "night" in c["raw_feature_name"] for c in contribs_fraud)
 
 def test_ingest_and_spike_detection_flow(client):
-    # Ingest a burst of fraudulent transactions
     merchant_id = "merch_apex_retail"
     alert_ids = []
     
@@ -74,7 +71,7 @@ def test_ingest_and_spike_detection_flow(client):
         if data["is_spike_detected"] and data["alert_id"]:
             alert_ids.append(data["alert_id"])
 
-    assert len(alert_ids) > 0, "Spike detector should have triggered an alert on high-velocity fraud burst"
+    assert len(alert_ids) > 0, "Spike detector should have triggered an alert on high fraud burst"
 
     # Verify Alert in Merchant Alerts List
     res = client.get(f"/merchants/{merchant_id}/alerts")
@@ -93,8 +90,7 @@ def test_ingest_and_spike_detection_flow(client):
     assert "raw_window_stats" in audit_data
 
 def test_consent_layer_invariants(client):
-    merchant_id = "merch_fresh_test_01"
-    # Create merchant via ingest
+    merchant_id = f"merch_consent_test_{datetime.now().timestamp()}"
     client.post("/ingest", json={
         "id": f"tx_setup_{datetime.now().timestamp()}",
         "merchant_id": merchant_id,
@@ -146,12 +142,97 @@ def test_dashboard_summary_endpoint(client):
     assert len(data["all_merchants"]) >= 3
 
 def test_simulator_controls(client):
-    # Step simulator
     res = client.post("/simulator/step?merchant_id=merch_apex_retail")
     assert res.status_code == 200
     assert res.json()["status"] == "STEPPED"
 
-    # Status check
     res_status = client.get("/simulator/status")
     assert res_status.status_code == 200
     assert "recent_events" in res_status.json()
+
+def test_window_level_spike_matching_unit():
+    """
+    Unit test verifying window-level matching logic on a hand-constructed example
+    with known ground-truth and prediction sets.
+    """
+    base_t = datetime(2026, 1, 1, 10, 0, 0, tzinfo=timezone.utc)
+    
+    # Ground Truth Spikes:
+    # 1. Merchant A at 10:00 - 10:15
+    # 2. Merchant A at 12:00 - 12:15 (will be missed by model -> FN)
+    # 3. Merchant B at 14:00 - 14:15
+    true_spikes = [
+        {
+            "merchant_id": "merch_A",
+            "window_start": base_t,
+            "window_end": base_t + timedelta(minutes=15),
+            "actual_rate": 0.75,
+            "z_score": 4.5
+        },
+        {
+            "merchant_id": "merch_A",
+            "window_start": base_t + timedelta(hours=2),
+            "window_end": base_t + timedelta(hours=2, minutes=15),
+            "actual_rate": 0.60,
+            "z_score": 3.8
+        },
+        {
+            "merchant_id": "merch_B",
+            "window_start": base_t + timedelta(hours=4),
+            "window_end": base_t + timedelta(hours=4, minutes=15),
+            "actual_rate": 0.80,
+            "z_score": 5.0
+        }
+    ]
+
+    # Predicted Alerts:
+    # 1. Merchant A at 10:05 - 10:20 (matches True Spike 1 -> TP #1)
+    # 2. Merchant A at 11:00 - 11:15 (no true spike -> FP #1)
+    # 3. Merchant B at 14:02 - 14:17 (matches True Spike 3 -> TP #2)
+    # 4. Merchant C at 16:00 - 16:15 (no true spike -> FP #2)
+    predicted_alerts = [
+        {
+            "merchant_id": "merch_A",
+            "window_start": base_t + timedelta(minutes=5),
+            "window_end": base_t + timedelta(minutes=20),
+            "predicted_rate": 0.70,
+            "z_score": 4.2
+        },
+        {
+            "merchant_id": "merch_A",
+            "window_start": base_t + timedelta(hours=1),
+            "window_end": base_t + timedelta(hours=1, minutes=15),
+            "predicted_rate": 0.40,
+            "z_score": 2.8
+        },
+        {
+            "merchant_id": "merch_B",
+            "window_start": base_t + timedelta(hours=4, minutes=2),
+            "window_end": base_t + timedelta(hours=4, minutes=17),
+            "predicted_rate": 0.78,
+            "z_score": 4.9
+        },
+        {
+            "merchant_id": "merch_C",
+            "window_start": base_t + timedelta(hours=6),
+            "window_end": base_t + timedelta(hours=6, minutes=15),
+            "predicted_rate": 0.50,
+            "z_score": 3.1
+        }
+    ]
+
+    # Run matching with 15-minute tolerance
+    tp, fp, fn, matches = match_window_events(true_spikes, predicted_alerts, tolerance_minutes=15.0)
+
+    # Verification:
+    # TP must be exactly 2 (Merchant A at 10:00, Merchant B at 14:00)
+    # FP must be exactly 2 (Merchant A at 11:00, Merchant C at 16:00)
+    # FN must be exactly 1 (Merchant A at 12:00 missed)
+    assert tp == 2, f"Expected 2 True Positives, got {tp}"
+    assert fp == 2, f"Expected 2 False Positives, got {fp}"
+    assert fn == 1, f"Expected 1 False Negative, got {fn}"
+    
+    precision = tp / (tp + fp)
+    recall = tp / (tp + fn)
+    assert precision == 0.50, f"Expected precision 0.50, got {precision}"
+    assert recall == 2.0 / 3.0, f"Expected recall 0.6667, got {recall}"

@@ -8,7 +8,22 @@ from backend.database import SessionLocal, TransactionDB
 from backend.spike_detector import spike_detector_service
 from backend.consent import consent_service
 
+# ==============================================================================
+# DEMO STREAM GENERATOR (Interactive Dashboard Replay Engine)
+#
+# IMPORTANT ARCHITECTURAL DISTINCTION:
+# 1. Model Training & Offline Evaluation use real PaySim benchmark transaction data
+#    grouped by merchant using `nameDest` (see `backend/classifier.py` & `backend/eval_harness.py`).
+# 2. This module (`simulator.py`) is a synthetic demo stream generator modeled on
+#    PaySim's transaction amount distributions and coordinated fraud-burst characteristics,
+#    providing real-time interactivity for the live telemetry dashboard.
+# ==============================================================================
+
 class StreamSimulator:
+    """
+    Interactive demo stream generator modeled on PaySim's transaction and fraud-burst characteristics.
+    Serves as an interactive stand-in for a live merchant payment gateway feed.
+    """
     def __init__(self):
         self.is_running = False
         self.interval_seconds = 1.0  # Time between tx generation ticks
