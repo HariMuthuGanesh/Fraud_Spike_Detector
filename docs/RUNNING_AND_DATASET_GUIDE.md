@@ -116,7 +116,7 @@ This runs the time-based evaluation, computes Precision/Recall, calculates false
 
 ### Step 5: Start the Web Application & Server
 Launch the FastAPI backend server (which automatically serves the frontend at the root URL):
-```powershell
+```powershelluvicorn backend.app:app --host 127.0.0.1 --port 8000 --reload
 uvicorn backend.app:app --host 127.0.0.1 --port 8000 --reload
 ```
 

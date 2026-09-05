@@ -138,9 +138,9 @@ export default function App() {
     }
   };
 
-  const handleInjectBurst = async () => {
+  const handleInjectBurst = async (count = 8) => {
     try {
-      await fetch(`/simulator/burst?merchant_id=${selectedMerchant}&count=8`, { method: 'POST' });
+      await fetch(`/simulator/burst?merchant_id=${selectedMerchant}&count=${count}`, { method: 'POST' });
       fetchDashboardData();
       fetchSimulatorStatus();
     } catch (err) {
@@ -164,16 +164,16 @@ export default function App() {
     fetchAuditData(alertId);
   };
 
-  const handleToggleConsent = async (newFlag) => {
+  const handleToggleConsent = async (newFlag, reason) => {
     try {
       const res = await fetch(`/merchants/${selectedMerchant}/consent`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           consent_flag: newFlag,
-          reason: newFlag 
+          reason: reason || (newFlag 
             ? 'Merchant enabled cross-merchant signal sharing' 
-            : 'Merchant reverted to 100% single-merchant isolation'
+            : 'Merchant reverted to 100% single-merchant isolation')
         })
       });
       if (res.ok) {
@@ -187,17 +187,18 @@ export default function App() {
 
   return (
     <div className="app-container">
-      {/* Sidebar */}
+      {/* Left Sidebar */}
       <Sidebar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         selectedMerchant={selectedMerchant}
         setSelectedMerchant={setSelectedMerchant}
         protectionActive={true}
+        activeAlertCount={dashboardData?.recent_alerts?.length || 0}
       />
 
       {/* Main Viewport */}
-      <main className="main-viewport">
+      <main className="main-content">
         <TopHeader
           activeTab={activeTab}
           isSimulatorRunning={isSimulatorRunning}
@@ -205,6 +206,7 @@ export default function App() {
           onStepSimulator={handleStepSimulator}
           onInjectBurst={handleInjectBurst}
           onResetSimulator={handleResetSimulator}
+          selectedMerchant={selectedMerchant}
         />
 
         {activeTab === 'dashboard' && (
@@ -217,7 +219,7 @@ export default function App() {
 
         {activeTab === 'audit' && (
           <AuditScreen
-            alerts={dashboardData?.recent_alerts || []}
+            recentAlerts={dashboardData?.recent_alerts || []}
             selectedAlertId={selectedAlertId}
             onSelectAlert={setSelectedAlertId}
             auditData={auditData}
@@ -227,6 +229,7 @@ export default function App() {
         {activeTab === 'consent' && (
           <ConsentScreen
             consentData={consentData}
+            selectedMerchant={selectedMerchant}
             onToggleConsent={handleToggleConsent}
           />
         )}
@@ -234,6 +237,7 @@ export default function App() {
         {activeTab === 'metrics' && (
           <MetricsScreen
             metricsData={metricsData}
+            selectedMerchant={selectedMerchant}
           />
         )}
       </main>

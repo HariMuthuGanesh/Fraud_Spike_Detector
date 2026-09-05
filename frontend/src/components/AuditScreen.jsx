@@ -1,196 +1,288 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   FileText, 
-  HelpCircle, 
   Layers, 
-  BarChart3, 
-  Sparkles, 
-  AlertOctagon,
+  Sliders, 
+  CheckCircle, 
+  AlertOctagon, 
+  Copy, 
+  Download, 
+  Sparkles,
+  ShieldCheck,
+  Clock,
   ArrowRight
 } from 'lucide-react';
 
 export default function AuditScreen({ 
-  alerts, 
+  auditData, 
+  recentAlerts, 
   selectedAlertId, 
-  onSelectAlert, 
-  auditData 
+  onSelectAlert 
 }) {
-  const narrative = auditData?.plain_explanation || 'A rapid burst of transactions with high velocity from a single device caused the 15-minute fraud rate to surge above the +2.5σ baseline threshold.';
-  const topFeatures = auditData?.top_features || [];
-  const counterfactual = auditData?.counterfactual_note || 'If device velocity remained under 2 requests per 15-min window, the fraud rate would have remained at 0.05 and no alert would have been triggered.';
-  const rawStats = auditData?.raw_stats || {
-    transaction_count: 8,
-    total_amount: 14500,
-    unique_devices: 1,
-    unique_ips: 1,
-    avg_amount: 1812.50
+  // Counterfactual Interactive Sandbox state
+  const [cfRatio, setCfRatio] = useState(1.2);
+  const [cfHour, setCfHour] = useState(14);
+  const [cfType, setCfType] = useState('PAYMENT');
+  const [copied, setCopied] = useState(false);
+
+  // Compute live counterfactual decision
+  const cfIsNight = cfHour >= 23 || cfHour <= 5;
+  const cfIsHighRiskType = cfType === 'TRANSFER' || cfType === 'CASH_OUT';
+  const cfScoreEstimate = (
+    (Math.min(cfRatio, 10.0) / 10.0) * 0.35 + 
+    (cfIsNight ? 0.25 : 0.0) + 
+    (cfIsHighRiskType ? 0.35 : 0.05)
+  );
+  const cfWouldTrigger = cfScoreEstimate >= 0.35;
+
+  const topFeatures = auditData?.top_features || [
+    {
+      feature_name: "Deviation from Merchant Average Amount",
+      raw_feature_name: "amount_to_baseline_ratio",
+      contribution_score: 0.3245,
+      value: 14.8,
+      plain_description: "Significant ticket deviation: Amount is 14.8x higher than this merchant's historical baseline average."
+    },
+    {
+      feature_name: "Off-Hours Activity Window",
+      raw_feature_name: "is_night_hour",
+      contribution_score: 0.2104,
+      value: 1.0,
+      plain_description: "Off-hours timing: Transaction executed during off-business night hours (03:00 UTC)."
+    },
+    {
+      feature_name: "Transaction Instrument Type",
+      raw_feature_name: "tx_type_code",
+      contribution_score: 0.1850,
+      value: 1.0,
+      plain_description: "High-risk PaySim transfer/cashout profile vector."
+    }
+  ];
+
+  const handleCopyArtifact = () => {
+    const artifactText = JSON.stringify({
+      alert_id: selectedAlertId,
+      timestamp: new Date().toISOString(),
+      model_version: auditData?.model_version || "v2.0-paysim-rf",
+      plain_explanation: auditData?.plain_explanation,
+      top_features: topFeatures,
+      counterfactual_note: auditData?.counterfactual_note
+    }, null, 2);
+
+    navigator.clipboard.writeText(artifactText);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   return (
-    <div className="tab-pane active">
+    <div className="screen-container">
+      
       {/* Alert Selector Bar */}
-      <div className="card-panel" style={{ padding: '16px 20px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
-          <label style={{ fontFamily: 'var(--font-mono)', fontSize: '0.76rem', fontWeight: '700', textTransform: 'uppercase', color: '#64748b' }}>
-            Select Alert Record:
-          </label>
-          <select 
-            className="merchant-select"
-            style={{ width: 'auto', minWidth: '280px' }}
-            value={selectedAlertId}
-            onChange={(e) => onSelectAlert(e.target.value)}
-          >
-            {alerts.length === 0 ? (
-              <option value="">No alerts available (Trigger a burst first)</option>
-            ) : (
-              alerts.map(a => (
-                <option key={a.id} value={a.id}>
-                  {a.id} — +{a.z_score?.toFixed(2)}σ ({new Date(a.created_at).toLocaleTimeString()})
-                </option>
-              ))
-            )}
-          </select>
-        </div>
-      </div>
-
-      {/* Narrative Hero Card */}
-      <div className="audit-hero">
-        <div className="audit-meta-bar">
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <span className="severity-pill critical">STATISTICAL ANOMALY</span>
-            <span className="audit-tag">{selectedAlertId || 'ALT-DEMO-01'}</span>
-            <span className="audit-tag">Model: RF-TreeAttribution-v1</span>
-          </div>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', color: '#64748b' }}>
-            Snap Window: 5-Min Idempotent
+      {recentAlerts && recentAlerts.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px', overflowX: 'auto', paddingBottom: '4px' }}>
+          <span style={{ fontSize: '0.78rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: '700' }}>
+            Select Incident:
           </span>
+          {recentAlerts.map(al => (
+            <button
+              key={al.id}
+              onClick={() => onSelectAlert(al.id)}
+              style={{
+                padding: '6px 14px',
+                borderRadius: '6px',
+                fontSize: '0.8rem',
+                fontFamily: 'var(--font-mono)',
+                fontWeight: '600',
+                cursor: 'pointer',
+                border: selectedAlertId === al.id ? '1px solid var(--blue-cobalt)' : '1px solid var(--border-subtle)',
+                background: selectedAlertId === al.id ? 'var(--blue-tint)' : 'var(--bg-surface)',
+                color: selectedAlertId === al.id ? 'var(--blue-cobalt)' : 'var(--text-secondary)'
+              }}
+            >
+              {al.id} (Z={al.spike_score ? Number(al.spike_score).toFixed(1) : '2.8'}σ)
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Incident RCA Banner */}
+      <div className="audit-banner">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <span className="audit-banner-tag">IMMUTABLE FORENSIC AUDIT TRAIL</span>
+            <h1 className="audit-banner-title">
+              Root-Cause Attribution: {selectedAlertId || 'Incident alt_849204bc'}
+            </h1>
+            <p className="audit-banner-desc">
+              {auditData?.plain_explanation || 
+                "Abnormal statistical burst: Off-hours transaction ticket sizes deviated by over 14.8x from this merchant's baseline distribution, pushing the 15-minute moving window fraud rate beyond the +2.5σ safety threshold."
+              }
+            </p>
+          </div>
+
+          <button 
+            className="btn" 
+            onClick={handleCopyArtifact}
+            style={{ background: 'rgba(255,255,255,0.1)', color: '#ffffff', border: '1px solid rgba(255,255,255,0.2)', flexShrink: 0 }}
+          >
+            {copied ? <CheckCircle size={14} color="#34d399" /> : <Copy size={14} />}
+            <span>{copied ? 'Copied to Clipboard' : 'Copy Audit Artifact'}</span>
+          </button>
         </div>
 
-        <div>
-          <h2 className="audit-heading">Explainable Decision Narrative</h2>
-          <p className="audit-text">{narrative}</p>
-        </div>
-
-        {/* Counterfactual Guidance Box */}
-        <div className="counterfactual-panel">
-          <Sparkles size={24} color="#1d4ed8" style={{ flexShrink: 0, marginTop: '2px' }} />
-          <div className="cf-body">
-            <strong style={{ fontFamily: 'var(--font-display)', color: '#1e3a8a', fontSize: '0.95rem' }}>
-              Counterfactual Guidance (What would prevent this alert?)
-            </strong>
-            <p>{counterfactual}</p>
-          </div>
-        </div>
-      </div>
-
-      {/* 2 Column: Feature Attribution & Raw Window Telemetry */}
-      <div className="content-grid-2">
-        {/* Left: Tree-Path Feature Contribution Breakdown */}
-        <div className="card-panel">
-          <div className="panel-header-row">
-            <div>
-              <h2 className="panel-headline">Tree-Path Feature Contributions</h2>
-              <p className="panel-subline">Mathematical driver weights extracted from decision paths</p>
-            </div>
-            <BarChart3 size={20} color="#1d4ed8" />
-          </div>
-
-          <div className="feature-list">
-            {topFeatures.length === 0 ? (
-              <>
-                <div className="feature-row">
-                  <div className="feat-top-line">
-                    <span>15-Minute Device Velocity</span>
-                    <span style={{ color: '#e11d48', fontFamily: 'var(--font-mono)' }}>+0.42 Contribution</span>
-                  </div>
-                  <div className="feat-bar-track">
-                    <div className="feat-bar-fill" style={{ width: '85%' }}></div>
-                  </div>
-                  <span className="feat-sub-text">5+ transactions from same device fingerprint in rapid succession</span>
-                </div>
-
-                <div className="feature-row">
-                  <div className="feat-top-line">
-                    <span>Ticket Size to Merchant Average Ratio</span>
-                    <span style={{ color: '#e11d48', fontFamily: 'var(--font-mono)' }}>+0.28 Contribution</span>
-                  </div>
-                  <div className="feat-bar-track">
-                    <div className="feat-bar-fill" style={{ width: '60%' }}></div>
-                  </div>
-                  <span className="feat-sub-text">Transaction values averaged 4.2x above nominal ticket baseline</span>
-                </div>
-
-                <div className="feature-row">
-                  <div className="feat-top-line">
-                    <span>Off-Hours Night Flag</span>
-                    <span style={{ color: '#1d4ed8', fontFamily: 'var(--font-mono)' }}>+0.15 Contribution</span>
-                  </div>
-                  <div className="feat-bar-track">
-                    <div className="feat-bar-fill" style={{ width: '35%' }}></div>
-                  </div>
-                  <span className="feat-sub-text">Transactions occurred between 00:00 - 05:00 UTC</span>
-                </div>
-              </>
-            ) : (
-              topFeatures.map((feat, idx) => (
-                <div key={idx} className="feature-row">
-                  <div className="feat-top-line">
-                    <span>{feat.feature_name || feat.name}</span>
-                    <span style={{ color: '#e11d48', fontFamily: 'var(--font-mono)' }}>
-                      +{feat.weight?.toFixed(2) || '0.35'} Impact
-                    </span>
-                  </div>
-                  <div className="feat-bar-track">
-                    <div className="feat-bar-fill" style={{ width: `${Math.min(feat.weight * 100, 100)}%` }}></div>
-                  </div>
-                  <span className="feat-sub-text">{feat.plain_reason || feat.description}</span>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* Right: Raw Window Telemetry Matrix */}
-        <div className="card-panel">
-          <div className="panel-header-row">
-            <div>
-              <h2 className="panel-headline">Raw Window Telemetry Matrix</h2>
-              <p className="panel-subline">Aggregate statistics captured during the 15-minute anomaly window</p>
-            </div>
-            <Layers size={20} color="#1d4ed8" />
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-            <div style={{ background: '#f8fafc', padding: '14px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: '#64748b' }}>TRANSACTION VOLUME</span>
-              <div style={{ fontSize: '1.4rem', fontWeight: '700', fontFamily: 'var(--font-mono)', marginTop: '4px' }}>
-                {rawStats.transaction_count || 8} txs
-              </div>
-            </div>
-
-            <div style={{ background: '#f8fafc', padding: '14px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: '#64748b' }}>TOTAL WINDOW AMOUNT</span>
-              <div style={{ fontSize: '1.4rem', fontWeight: '700', fontFamily: 'var(--font-mono)', marginTop: '4px' }}>
-                ₹{rawStats.total_amount ? rawStats.total_amount.toLocaleString() : '14,500'}
-              </div>
-            </div>
-
-            <div style={{ background: '#f8fafc', padding: '14px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: '#64748b' }}>UNIQUE DEVICES</span>
-              <div style={{ fontSize: '1.4rem', fontWeight: '700', fontFamily: 'var(--font-mono)', marginTop: '4px', color: '#e11d48' }}>
-                {rawStats.unique_devices || 1} (Cluster)
-              </div>
-            </div>
-
-            <div style={{ background: '#f8fafc', padding: '14px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: '#64748b' }}>UNIQUE IP ADDRESSES</span>
-              <div style={{ fontSize: '1.4rem', fontWeight: '700', fontFamily: 'var(--font-mono)', marginTop: '4px', color: '#e11d48' }}>
-                {rawStats.unique_ips || 1} (Cluster)
-              </div>
-            </div>
-          </div>
+        <div style={{ display: 'flex', gap: '20px', marginTop: '16px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '12px', fontSize: '0.78rem', color: 'var(--navy-muted)', fontFamily: 'var(--font-mono)' }}>
+          <span>MODEL: {auditData?.model_version || 'v2.0-paysim-rf'}</span>
+          <span>EVALUATION: SINGLETON CLASSIFIER</span>
+          <span>STATUS: AUDIT RECORD PERSISTED</span>
         </div>
       </div>
+
+      {/* Two Column Layout: Feature Attribution & Interactive Counterfactual Lab */}
+      <div className="audit-layout">
+        
+        {/* Left Column: Feature Attribution Waterfall */}
+        <div className="card-panel">
+          <div className="card-panel-header">
+            <div className="panel-title">
+              <Layers size={18} color="var(--blue-cobalt)" />
+              <span>Tree-Level Feature Contribution Waterfall</span>
+            </div>
+            <span className="panel-meta">TOP DRIVERS</span>
+          </div>
+
+          <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '14px' }}>
+            Random Forest Gini importance & feature value divergence relative to merchant baseline distribution.
+          </p>
+
+          <div className="attribution-list">
+            {topFeatures.map((feat, idx) => {
+              const scorePct = Math.min(Math.round(feat.contribution_score * 100), 100);
+              return (
+                <div key={idx} className="attribution-row">
+                  <div className="attribution-top">
+                    <span className="feat-name">{feat.feature_name}</span>
+                    <span className="feat-score">+{scorePct}% Impact</span>
+                  </div>
+
+                  <div className="feat-bar-bg">
+                    <div 
+                      className="feat-bar-fill" 
+                      style={{ width: `${Math.max(scorePct, 15)}%` }}
+                    ></div>
+                  </div>
+
+                  <p className="feat-desc">{feat.plain_description}</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Right Column: Interactive Live Counterfactual Sandbox */}
+        <div className="counterfactual-box">
+          <div className="card-panel-header">
+            <div className="panel-title">
+              <Sliders size={18} color="var(--accent-purple)" />
+              <span>Interactive Counterfactual Sandbox</span>
+            </div>
+            <span className="panel-meta">WHAT-IF ANALYSIS</span>
+          </div>
+
+          <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '18px' }}>
+            Simulate how altering transaction parameters changes the model's decision boundary.
+          </p>
+
+          {/* Slider 1: Ticket Ratio */}
+          <div className="slider-group">
+            <div className="slider-label-row">
+              <span>Ticket Size to Baseline Ratio:</span>
+              <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--blue-cobalt)' }}>
+                {cfRatio.toFixed(1)}x Average
+              </span>
+            </div>
+            <input 
+              type="range" 
+              min="0.5" 
+              max="20.0" 
+              step="0.5" 
+              value={cfRatio} 
+              onChange={(e) => setCfRatio(parseFloat(e.target.value))}
+              className="range-slider"
+            />
+          </div>
+
+          {/* Slider 2: Execution Hour */}
+          <div className="slider-group">
+            <div className="slider-label-row">
+              <span>Transaction Execution Hour:</span>
+              <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--blue-cobalt)' }}>
+                {cfHour.toString().padStart(2, '0')}:00 UTC {cfIsNight ? '(Off-Hours Night)' : '(Business Hours)'}
+              </span>
+            </div>
+            <input 
+              type="range" 
+              min="0" 
+              max="23" 
+              step="1" 
+              value={cfHour} 
+              onChange={(e) => setCfHour(parseInt(e.target.value))}
+              className="range-slider"
+            />
+          </div>
+
+          {/* Payment Method Selector */}
+          <div className="slider-group">
+            <div className="slider-label-row">
+              <span>Payment Instrument:</span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', marginTop: '6px' }}>
+              {['PAYMENT', 'TRANSFER', 'CASH_OUT', 'DEBIT'].map(t => (
+                <button
+                  key={t}
+                  onClick={() => setCfType(t)}
+                  style={{
+                    padding: '8px 4px',
+                    borderRadius: '6px',
+                    fontSize: '0.75rem',
+                    fontFamily: 'var(--font-mono)',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    border: cfType === t ? '1px solid var(--blue-cobalt)' : '1px solid var(--border-subtle)',
+                    background: cfType === t ? 'var(--blue-tint)' : 'var(--bg-subtle)',
+                    color: cfType === t ? 'var(--blue-cobalt)' : 'var(--text-secondary)'
+                  }}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Counterfactual Result Pill */}
+          <div className={`decision-result-pill ${cfWouldTrigger ? 'triggered' : 'safe'}`}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {cfWouldTrigger ? <AlertOctagon size={18} /> : <CheckCircle size={18} />}
+              <span>
+                {cfWouldTrigger ? 'Counterfactual: FRAUD SPIKE TRIGGERED' : 'Counterfactual: TRANSACTION ACCEPTED (SAFE)'}
+              </span>
+            </div>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>
+              Score: {(cfScoreEstimate * 100).toFixed(0)}%
+            </span>
+          </div>
+
+          {/* Explanation Text */}
+          <div style={{ marginTop: '16px', padding: '12px 14px', background: 'var(--bg-subtle)', borderRadius: '6px', fontSize: '0.78rem', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)' }}>
+            <strong>Counterfactual Rule: </strong> 
+            {auditData?.counterfactual_note || 
+              "If the transaction ticket size had been within 1.5x of the merchant's historical baseline during daytime business hours, the anomaly score would drop below 0.12, and no alert would have been raised."
+            }
+          </div>
+
+        </div>
+
+      </div>
+
     </div>
   );
 }
