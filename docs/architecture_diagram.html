@@ -457,17 +457,17 @@
         type: "FEATURE ENGINEERING",
         title: "FeatureExtractor",
         file: "backend/classifier.py",
-        edges: "8 Edges (Velocity Extraction)",
-        desc: "Extracts real-time velocity features (15-min device count, 1-hour IP concentration), ticket size deviation relative to historical merchant averages, and off-hour transaction indicators.",
-        tags: ["15m Velocity", "1h IP Clustering", "Ticket Deviation", "Night-Hour Flag"]
+        edges: "8 Edges (PaySim Feature Extraction)",
+        desc: "Extracts canonical PaySim features: transaction ticket deviation relative to merchant historical baseline averages (amount_to_baseline_ratio), step-derived hour of day, off-hours night indicator, and instrument type encoding.",
+        tags: ["Merchant Baseline Ratio", "Night-Hour Flag", "Instrument Type", "Ticket Size"]
       },
       classifier: {
         type: "ML CLASSIFIER & ATTRIBUTION",
         title: "FraudClassifierEngine",
         file: "backend/classifier.py",
-        edges: "9 Edges (God Node #6)",
-        desc: "Calibrated Random Forest classifier producing per-transaction fraud probabilities. Translates tree decision paths into plain-language human descriptions and attribution scores.",
-        tags: ["Random Forest", "Tree-Path Attribution", "Explainability Engine"]
+        edges: "9 Edges (Singleton Model)",
+        desc: "Calibrated Random Forest classifier trained on 6.36M Kaggle PaySim dataset (0.9524 ROC AUC, 85.4% Recall). Translates tree decision paths into plain-language human descriptions and attribution scores.",
+        tags: ["Random Forest", "Tree-Path Attribution", "Explainability Engine", "ROC AUC 0.9524"]
       },
       buffer: {
         type: "STATEFUL SLIDING WINDOW",
@@ -481,23 +481,23 @@
         type: "STATISTICAL SPIKE DETECTOR",
         title: "SpikeDetectorService",
         file: "backend/spike_detector.py",
-        edges: "9 Edges (God Node #7)",
-        desc: "Calculates the statistical Z-score deviation Z = (rate - mean) / std. Triggers alerts when Z >= 2.5σ over moving windows, ensuring idempotent alert creation and counterfactual synthesis.",
+        edges: "9 Edges (Z-Score Gate)",
+        desc: "Calculates the statistical Z-score deviation Z = (rate - mean) / std. Triggers alerts when Z >= 2.5σ over moving windows with fraud rate >= 15%, ensuring idempotent alert creation.",
         tags: ["Z-Score >= 2.5σ", "Idempotent Alerts", "Counterfactual Synthesis"]
       },
       audit: {
         type: "EXPLAINABLE AUDIT STORE",
         title: "AlertDB & AuditRecordDB",
         file: "backend/database.py",
-        edges: "10 Edges (God Node #4)",
-        desc: "Persists immutable alert records alongside plain-English decision narratives, top 4 contributing feature weights, raw window statistics, and counterfactual condition notes.",
-        tags: ["Immutable Audit", "SHAP Feature Weights", "Counterfactuals", "Raw Telemetry"]
+        edges: "10 Edges (Audit Trail)",
+        desc: "Persists immutable alert records alongside plain-English decision narratives, top feature attribution weights, raw window statistics, and counterfactual condition notes.",
+        tags: ["Immutable Audit", "Tree Feature Weights", "Counterfactuals", "Raw Telemetry"]
       },
       consent: {
         type: "PRIVACY & GOVERNANCE",
         title: "ConsentService",
         file: "backend/consent.py",
-        edges: "8 Edges (God Node #9)",
+        edges: "8 Edges (Privacy Router)",
         desc: "Enforces single-merchant isolation by defaulting cross-merchant data sharing to OFF. Guarantees 100% full capacity local protection regardless of merchant consent state.",
         tags: ["Opt-In Default OFF", "Single-Merchant Isolation", "Immutable Changelog"]
       },
@@ -506,24 +506,24 @@
         title: "Shared Signal Queue",
         file: "backend/consent.py",
         edges: "3 Edges (Pooled Intelligence)",
-        desc: "Simulated cross-merchant intelligence queue. Signals are only enqueued when a merchant explicitly enables opt-in sharing, ensuring zero undisclosed pooling.",
-        tags: ["Gated Queue", "Anonymized Signals", "Cross-Merchant Pool"]
+        desc: "Cross-merchant intelligence queue. Signals are only enqueued when a merchant explicitly enables opt-in sharing, using SHA-256 cryptographic anonymization.",
+        tags: ["Gated Queue", "SHA-256 Anonymization", "Cross-Merchant Pool"]
       },
       eval: {
         type: "OFFLINE EVALUATION HARNESS",
         title: "EvaluationHarness",
         file: "backend/eval_harness.py",
         edges: "6 Edges (Honest Benchmark)",
-        desc: "Executes strict chronological time-based train/test splits (no lookahead bias). Evaluates held-out precision, recall, false-positive rate, and estimated $14.50/unit FP friction cost.",
-        tags: ["Time-Based Split", "Precision/Recall", "FP Cost Accounting", "Vulcan Benchmark"]
+        desc: "Executes strict chronological 70/30 time-based train/test splits scoped per merchant with automatic cache invalidation. Evaluates held-out precision, recall, and false-positive cost ($14.50/unit).",
+        tags: ["Time-Based Split", "Per-Merchant Scoped", "FP Cost Accounting", "Vulcan Benchmark"]
       },
       ui: {
-        type: "TELEMETRY DASHBOARD",
-        title: "Telemetry Dashboard",
-        file: "frontend/index.html & frontend/app.js",
-        edges: "11 Edges (God Node #2)",
-        desc: "4 responsive screens delivering real-time HUD telemetry: 1) Risk Overview & Canvas Scope, 2) Alert Audit & Explainability, 3) Consent Governance, and 4) Time-Split Metrics.",
-        tags: ["Canvas Telemetry", "Audit Explorer", "Consent Toggle", "Live Ticker"]
+        type: "CYBER-INDUSTRIAL COMMAND CENTER",
+        title: "React 19 + Vite Telemetry UI",
+        file: "frontend/src/App.jsx & components",
+        edges: "11 Edges (Command Center)",
+        desc: "4 responsive screens delivering Cyber-Industrial Command Center: 1) Risk Radar & Live Waveform Canvas, 2) Forensic Explainability Studio & Counterfactual Sandbox, 3) Privacy & Mesh Perimeter, and 4) Time-Split Evaluation & ROI Calculator.",
+        tags: ["Canvas Waveform", "Counterfactual Sandbox", "Consent Toggle", "Live Ticker"]
       }
     };
 
